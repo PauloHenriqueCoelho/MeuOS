@@ -3,6 +3,9 @@
 #include "../include/io.h"
 #include "../include/fs.h"
 #include "../include/keyboard.h" 
+#include "../include/mouse.h" // Necessário
+#include "../include/window.h"
+#include "../include/utils.h" // <--- ADICIONE ESTA LINHA (contém strcpy)
 
 // --- CONSOLE ---
 void os_print(const char* message) { 
@@ -71,6 +74,28 @@ int os_window_close_clicked(int win_x, int win_y, int win_w, int mouse_x, int mo
     return 0;
 }
 
+void os_wait_interaction() {
+    // Limpa estado anterior do mouse
+    while(mouse_get_status() & 1); 
+    
+    // Loop de espera
+    while(1) {
+        // Se clicar com mouse
+        if (mouse_get_status() & 1) {
+            while(mouse_get_status() & 1); // Espera soltar
+            return;
+        }
+        
+        // Se apertar Enter (precisamos checar o buffer do teclado)
+        // Como o keyboard_get_key remove do buffer, usamos ele
+        char c = keyboard_get_key();
+        if (c == '\n') return;
+        
+        // Economiza CPU
+        __asm__ volatile("hlt");
+    }
+}
+
 // --- SYSTEM ---
 void os_reboot() { 
     // Tenta reiniciar pelo controlador de teclado
@@ -93,4 +118,23 @@ int os_window_title_clicked(int win_x, int win_y, int win_w, int mouse_x, int mo
         return 1;
     }
     return 0;
+}
+
+int os_file_exists(char* name) {
+    return fs_exists(name);
+}
+
+void os_msgbox(char* title, char* text) {
+    // Cria uma janela genérica (TYPE_TEXT = 2)
+    // Posição levemente aleatória para não empilhar perfeitamente se abrir várias
+    static int offset = 0;
+    offset += 20;
+    if (offset > 100) offset = 0;
+
+    int id = wm_create(TYPE_TEXT, title, 100 + offset, 80 + offset, 200, 120, 1); // 1 = Azul
+    
+    if (id != -1) {
+        Window* w = wm_get(id);
+        strcpy(w->buffer, text); // Copia o texto para a janela
+    }
 }

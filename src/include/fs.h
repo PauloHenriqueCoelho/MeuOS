@@ -18,5 +18,6 @@ void fs_list();
 int fs_create(char* name, char* content);
 int fs_delete(char* name);
 int fs_read_to_buffer(char* name, char* buffer); // <--- Atualizado
-
+int fs_exists(char* name);
+void fs_get_list_str(char* buffer);
 #endif

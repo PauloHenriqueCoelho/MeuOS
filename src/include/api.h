@@ -8,6 +8,8 @@ void os_print(const char* message);
 void os_print_color(const char* message, uint8_t fg, uint8_t bg);
 void os_clear_screen();
 void os_set_cursor(int x, int y);
+void os_msgbox(char* title, char* text);
+
 
 // --- ENTRADA ---
 char os_wait_for_key();
@@ -27,5 +29,6 @@ void os_create_window(char* title, int x, int y, int w, int h, uint8_t color);
 // Retorna 1 se clicou, 0 se não.
 int os_window_close_clicked(int win_x, int win_y, int win_w, int mouse_x, int mouse_y);
 int os_window_title_clicked(int win_x, int win_y, int win_w, int mouse_x, int mouse_y);
+void os_wait_interaction();
 
 #endif

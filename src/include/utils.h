@@ -11,5 +11,6 @@ int strlen(const char* str);
 int strcmp(const char* s1, const char* s2);
 int strncmp(const char* s1, const char* s2, int n);
 void strcpy(char* dest, const char* src);
+void strcat(char* dest, const char* src);
 
 #endif

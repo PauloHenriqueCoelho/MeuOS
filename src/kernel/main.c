@@ -9,181 +9,140 @@
 #include "../include/programs.h"
 #include "../include/api.h"
 #include "../include/window.h"
-#include "../include/timer.h" // <--- Novo include
+#include "../include/timer.h"
 
-// ID da janela que está focada (recebe teclado)
-int current_app_id = WIN_ID_NONE; 
-
-// ID da janela sendo arrastada
 int dragging_window_id = WIN_ID_NONE;
-int drag_offset_x = 0;
-int drag_offset_y = 0;
-
-// Função central para redesenhar a tela
+int drag_offset_x = 0, drag_offset_y = 0;
 
 void draw_clock() {
-    // Pega o tempo desde o boot (em ticks). 
-    // Assumindo timer a 100Hz -> 100 ticks = 1 segundo
     uint32_t seconds = get_tick() / 100;
-    
-    // Converte para minutos:segundos
-    int m = (seconds / 60) % 60;
-    int s = seconds % 60;
-    
+    int m = (seconds / 60) % 60; int s = seconds % 60;
     char time_str[16];
-    // Formatação manual rápida (Ex: "05:09")
-    time_str[0] = (m / 10) + '0';
-    time_str[1] = (m % 10) + '0';
-    time_str[2] = ':';
-    time_str[3] = (s / 10) + '0';
-    time_str[4] = (s % 10) + '0';
-    time_str[5] = '\0';
-    
-    // Desenha no canto direito da barra cinza
-    // Barra está em Y=185. Vamos por em X=270
-    // Primeiro limpa o fundo (cinza)
+    time_str[0] = (m/10)+'0'; time_str[1]=(m%10)+'0'; time_str[2]=':';
+    time_str[3] = (s/10)+'0'; time_str[4]=(s%10)+'0'; time_str[5]='\0';
     gfx_fill_rect(270, 187, 45, 10, 7); 
-    
-    vga_set_cursor(275, 189);
-    vga_print(time_str);
+    vga_set_cursor(275, 189); vga_print(time_str);
 }
 
 void refresh_screen() {
-    // 1. Desenha o Desktop (Fundo e Ícones)
     desktop_draw();
     
-    // 2. Percorre as janelas ativas e desenha
-    // (Poderíamos fazer um loop no WM, mas vamos fazer manual por enquanto para controlar ordem)
-    
-    // Se a calculadora estiver aberta
-    Window* w_calc = wm_get(WIN_ID_CALC);
-    if (w_calc->active) {
-        calculator_draw();
+    // 1. Desenha TODAS as janelas ativas que NÃO são a focada
+    for (int i=0; i<MAX_WINDOWS; i++) {
+        Window* w = wm_get(i);
+        if (w && w->active && i != current_app_id) {
+            wm_draw_one(i);
+        }
     }
 
-    // Se o shell estiver aberto
-    Window* w_shell = wm_get(WIN_ID_SHELL);
-    if (w_shell->active) {
-        shell_draw(); // O shell agora sabe se desenhar!
+    // 2. Desenha a janela focada POR ÚLTIMO (para ficar em cima)
+    if (current_app_id != WIN_ID_NONE) {
+        Window* w = wm_get(current_app_id);
+        if (w && w->active) {
+            wm_draw_one(current_app_id);
+        }
     }
 }
 
 void kernel_main() {
-    init_gdt(); video_init(); init_idt(); keyboard_init(); mouse_init(); wm_init();
-    init_timer(100);
+    init_gdt(); video_init(); init_idt(); keyboard_init(); mouse_init(); wm_init(); init_timer(100);
     __asm__ volatile("sti");
 
     refresh_screen();
+    
+    // Inicia Shell Padrão
+    wm_create(TYPE_SHELL, "Terminal", 10, 10, 300, 180, 0);
+    shell_init();
+    current_app_id = 0; // Foco no shell
 
     while(1) {
-
         draw_clock();
-        
         int mx = mouse_get_x();
         int my = mouse_get_y();
         int click = (mouse_get_status() & 1);
         int redraw_needed = 0;
 
-        // --- 1. LÓGICA DE ARRASTAR JANELA ---
+        // --- ARRASTE ---
         if (dragging_window_id != WIN_ID_NONE) {
             if (click) {
-                // Continua arrastando
                 Window* w = wm_get(dragging_window_id);
-                w->x = mx - drag_offset_x;
-                w->y = my - drag_offset_y;
-                redraw_needed = 1;
+                if (w) {
+                    w->x = mx - drag_offset_x;
+                    w->y = my - drag_offset_y;
+                    redraw_needed = 1;
+                }
             } else {
-                // Soltou o mouse
                 dragging_window_id = WIN_ID_NONE;
             }
         }
-        
-        // --- 2. LÓGICA DE CLIQUE NOVO ---
+        // --- CLIQUES ---
         else if (click) {
-            // A. Verifica clique no Botão FECHAR (Genérico)
-            int close_id = wm_check_close_collision(mx, my);
-            if (close_id != WIN_ID_NONE) {
-                wm_close(close_id);
-                if (current_app_id == close_id) current_app_id = WIN_ID_NONE;
+            // 1. Primeiro checamos se clicou em qualquer lugar de QUALQUER janela
+            int title_hit = wm_check_title_collision(mx, my);
+            int body_hit = wm_check_body_collision(mx, my);
+            int close_hit = wm_check_close_collision(mx, my);
+
+            // Se o clique acertou qualquer parte de uma janela (Botão, Título ou Corpo)
+            if (close_hit != WIN_ID_NONE || title_hit != WIN_ID_NONE || body_hit != WIN_ID_NONE) {
                 
-                redraw_needed = 1;
-                // Espera soltar para não clicar em mais nada
-                while(mouse_get_status() & 1); 
-            }
-            
-            // B. Verifica clique na BARRA DE TÍTULO (Inicia Arraste)
-            else {
-                int title_id = wm_check_title_collision(mx, my);
-                if (title_id != WIN_ID_NONE) {
-                    dragging_window_id = title_id;
-                    current_app_id = title_id; // Dá foco
-                    Window* w = wm_get(title_id);
+                // Prioridade 1: Botão fechar
+                if (close_hit != WIN_ID_NONE) {
+                    wm_close(close_hit);
+                    if (current_app_id == close_hit) current_app_id = WIN_ID_NONE;
+                    redraw_needed = 1;
+                } 
+                // Prioridade 2: Arrastar pela barra de título
+                else if (title_hit != WIN_ID_NONE) {
+                    current_app_id = title_hit; // Traz para frente
+                    dragging_window_id = title_hit;
+                    Window* w = wm_get(title_hit);
                     drag_offset_x = mx - w->x;
                     drag_offset_y = my - w->y;
+                    redraw_needed = 1;
                 }
-                
-                // C. Verifica cliques no conteúdo (Botões da Calc, Ícones)
-                else {
-                    // Calculadora
-                    Window* w_calc = wm_get(WIN_ID_CALC);
-                    if (w_calc->active && 
-                        mx >= w_calc->x && mx <= w_calc->x + w_calc->w &&
-                        my >= w_calc->y && my <= w_calc->y + w_calc->h) {
-                        
-                        current_app_id = WIN_ID_CALC;
+                // Prioridade 3: Clicou no corpo (Apenas focar ou interagir)
+                else if (body_hit != WIN_ID_NONE) {
+                    current_app_id = body_hit; // Traz para frente
+                    redraw_needed = 1;
+                    
+                    // Se for calculadora, envia o clique
+                    Window* w = wm_get(body_hit);
+                    if (w->type == TYPE_CALC) {
                         calculator_click(mx, my);
-                        while(mouse_get_status() & 1);
-                    }
-
-                    // Shell (Corpo)
-                    Window* w_shell = wm_get(WIN_ID_SHELL);
-                    if (w_shell->active && 
-                        mx >= w_shell->x && mx <= w_shell->x + w_shell->w &&
-                        my >= w_shell->y && my <= w_shell->y + w_shell->h) {
-                        current_app_id = WIN_ID_SHELL;
-                    }
-
-                    // Ícones do Desktop (Só se nenhuma janela estiver por cima "teoricamente")
-                    // Simplificação: só checa ícones se clicou no fundo
-                    if (current_app_id == WIN_ID_NONE || dragging_window_id == WIN_ID_NONE) {
-                         if (mx >= 20 && mx <= 52 && my >= 20 && my <= 52) { // Shell Icon
-                            wm_open(WIN_ID_SHELL, "Terminal", 10, 10, 300, 180, 0);
-                            current_app_id = WIN_ID_SHELL;
-                            shell_init();
-                            redraw_needed = 1;
-                            while(mouse_get_status() & 1);
-                        }
-                        if (mx >= 20 && mx <= 52 && my >= 80 && my <= 112) { // Calc Icon
-                            wm_open(WIN_ID_CALC, "Calculadora", 100, 50, 120, 150, 7);
-                            current_app_id = WIN_ID_CALC;
-                            redraw_needed = 1;
-                            while(mouse_get_status() & 1);
-                        }
                     }
                 }
+                while(mouse_get_status() & 1); // Debounce
+            } 
+            // 2. SÓ CHECA ÍCONES se o clique caiu no "papel de parede" (não acertou janelas)
+            else {
+                if (mx >= 20 && mx <= 52) {
+                    if (my >= 20 && my <= 52) { // Shell
+                        wm_create(TYPE_SHELL, "Terminal", 10, 10, 300, 180, 0);
+                        redraw_needed = 1;
+                    }
+                    else if (my >= 80 && my <= 112) { // Calc
+                        wm_create(TYPE_CALC, "Calc", 100, 50, 120, 150, 7);
+                        redraw_needed = 1;
+                    }
+                }
+                while(mouse_get_status() & 1);
             }
         }
+        // Teclado só vai para o Shell se ele estiver focado
+       if (current_app_id != WIN_ID_NONE && wm_get(current_app_id)->type == TYPE_SHELL) {
+             char c = keyboard_get_key();
+             if (c != 0) {
+                 shell_handle_key(c);
+                 redraw_needed = 1; // <--- SE DIGITOU, PRECISA REDESENHAR!
+             }
+        }
 
-        // --- 3. REDESENHO (Se necessário) ---
+        // Se o redraw_needed for 1, a tela será atualizada e a janela nova 
+        // aparecerá no topo instantaneamente.
         if (redraw_needed) {
             mouse_reset_background();
             refresh_screen();
-            
-            // --- USO DA NOVA TECNOLOGIA ---
-            // Em vez de for(volatile int i...), usamos:
-            if (dragging_window_id != WIN_ID_NONE) {
-                sleep(2); // Espera 20ms (muito mais suave e estável)
-            }
-        }
-
-        // --- 4. TECLADO ---
-        if (current_app_id == WIN_ID_SHELL) {
-             char c = keyboard_get_key();
-             if (c != 0) {
-                 shell_handle_key(c); // Shell se vira para desenhar a letra
-             }
-        } else {
-            keyboard_get_key(); // Joga fora teclas se não for o shell
+            redraw_needed = 0; // Reseta para não pesar a CPU
         }
         
         __asm__ volatile("hlt");

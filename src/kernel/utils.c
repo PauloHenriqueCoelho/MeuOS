@@ -58,3 +58,21 @@ int strncmp(const char* s1, const char* s2, int n) {
 void strcpy(char* dest, const char* src) {
     while ((*dest++ = *src++));
 }
+
+void strcat(char* dest, const char* src) {
+    // 1. Vai até o final da string de destino (onde está o '\0')
+    char* d = dest;
+    while (*d != '\0') {
+        d++;
+    }
+
+    // 2. Começa a copiar a string de origem para o final da de destino
+    while (*src != '\0') {
+        *d = *src;
+        d++;
+        src++;
+    }
+
+    // 3. Adiciona o novo terminador nulo no final de tudo
+    *d = '\0';
+}

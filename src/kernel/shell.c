@@ -4,6 +4,9 @@
 #include "../include/utils.h"
 #include "../include/window.h" 
 #include "../include/api.h"
+#include "../include/script.h"
+#include "../include/mouse.h"
+#include "../include/fs.h" // <--- ADICIONE ESTE INCLUDE
 
 // Buffer interno do Shell
 char shell_buffer[256];
@@ -34,10 +37,8 @@ void shell_handle_key(char c) {
 
     if (c == '\n') {
         shell_execute(shell_buffer);
-        
         shell_cursor_pos = 0;
         for(int i=0; i<256; i++) shell_buffer[i] = 0;
-        
         shell_draw();
     }
     else if (c == '\b') {
@@ -59,85 +60,93 @@ void shell_handle_key(char c) {
             vga_set_cursor(w->x + 10 + prompt_size + text_offset, w->y + 30);
             vga_putchar(c);
         }
-    }
+    } 
 }
 
-// Helper para pegar argumento (ex: "cat arquivo.txt" -> retorna "arquivo.txt")
 char* get_argument(char* command) {
-    while (*command && *command != ' ') command++; // Vai até o espaço
-    if (*command == ' ') command++; // Pula o espaço
+    while (*command && *command != ' ') command++;
+    if (*command == ' ') command++;
     return command;
 }
 
 void shell_execute(char* command) {
-    // Comando: AJUDA
+    // AJUDA
     if (strcmp(command, "ajuda") == 0) {
-        os_create_window("Ajuda", 100, 100, 200, 120, 1); 
-        vga_set_cursor(110, 130); vga_print("ls     - Listar arqs");
-        vga_set_cursor(110, 140); vga_print("touch  - Criar arq");
-        vga_set_cursor(110, 150); vga_print("cat    - Ler arq");
-        vga_set_cursor(110, 160); vga_print("rm     - Apagar arq");
-        vga_set_cursor(110, 170); vga_print("reboot - Reiniciar");
-        
-        // Delay simples para ler
-        for(volatile int i=0; i<50000000; i++);
-        shell_draw(); 
+        os_msgbox("Ajuda", "ls: Listar\ntouch: Criar\ncat: Ler\nrm: Apagar\nreboot: Reiniciar");
     }
-    // Comando: LIMPAR
+    // LIMPAR
     else if (strcmp(command, "limpar") == 0) {
         shell_draw();
     }
-    // Comando: REBOOT
+    // MKFILE
+    else if (strncmp(command, "mkfile ", 7) == 0) {
+        char* args = command + 7;
+        char filename[32];
+        char content[256];
+        int i = 0;
+        while(args[i] && args[i] != ' ' && i < 31) {
+            filename[i] = args[i];
+            i++;
+        }
+        filename[i] = 0;
+        
+        if (args[i] == ' ') {
+            char* text = &args[i+1];
+            int j=0, k=0;
+            while(text[j]) {
+                if(text[j] == ';') content[k] = '\n';
+                else content[k] = text[j];
+                j++; k++;
+            }
+            content[k] = 0;
+            os_file_create(filename, content);
+            os_print(" Arquivo salvo!");
+        }
+    }
+    // RUN
+    else if (strncmp(command, "run ", 4) == 0) {
+        char* filename = get_argument(command);
+        run_script(filename);
+    }
+    // REBOOT
     else if (strcmp(command, "reboot") == 0) {
         os_reboot();
     }
-    // Comando: LS (Listar Arquivos)
+    // LS (Como Programa)
     else if (strcmp(command, "ls") == 0) {
-        os_create_window("Arquivos", 80, 80, 200, 150, 1);
-        vga_set_cursor(90, 100);
-        
-        // Como o fs_list imprime direto, ele pode sair da janela.
-        // O ideal seria o fs_list retornar uma string, mas vamos usar direto por enquanto.
-        os_file_list(); 
-        
-        for(volatile int i=0; i<80000000; i++);
-        shell_draw();
+        char list_buffer[512];
+        fs_get_list_str(list_buffer);
+        int id = wm_create(TYPE_TEXT, "Arquivos", 50, 50, 180, 120, 1);
+        if (id != -1) {
+            Window* w = wm_get(id);
+            strcpy(w->buffer, list_buffer);
+            os_print(" Janela aberta.");
+        }
     }
-    // Comando: TOUCH (Criar arquivo vazio)
+    // TOUCH
     else if (strncmp(command, "touch ", 6) == 0) {
         char* filename = get_argument(command);
-        if (*filename) {
-            os_file_create(filename, "Vazio"); // Cria com texto dummy
-            os_print(" Criado!");
-        }
+        if (*filename) os_file_create(filename, "Vazio");
     }
-    // Comando: RM (Deletar)
+    // RM
     else if (strncmp(command, "rm ", 3) == 0) {
         char* filename = get_argument(command);
-        if (*filename) {
-            os_file_delete(filename);
-        }
+        if (*filename) os_file_delete(filename);
     }
-    // Comando: CAT (Ler arquivo)
+    // CAT (Como Programa)
     else if (strncmp(command, "cat ", 4) == 0) {
         char* filename = get_argument(command);
-        char content[1024]; // Buffer temporário
-        
-        // Limpa buffer
-        for(int i=0; i<1024; i++) content[i] = 0;
-
+        char content[1024];
         if (os_file_read(filename, content)) {
-            // Mostra o conteúdo numa janela popup
-            os_create_window(filename, 60, 60, 250, 150, 15); // Janela Branca
-            vga_set_color(0, 15); // Texto preto
-            vga_set_cursor(70, 90);
-            vga_print(content);
-            vga_set_color(15, 0); // Restaura cor branca
-            
-            for(volatile int i=0; i<100000000; i++); // Espera ler
-            shell_draw();
-        } else {
-            // Se falhar (arquivo não existe), o cursor do shell apenas pisca
+            int id = wm_create(TYPE_TEXT, filename, 70, 70, 250, 150, 15);
+            if (id != -1) {
+                Window* w = wm_get(id);
+                strcpy(w->buffer, content);
+            }
         }
+    }
+    // MSG
+    else if (strncmp(command, "msg ", 4) == 0) {
+        os_msgbox("Mensagem", command + 4);
     }
 }

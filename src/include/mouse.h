@@ -8,4 +8,5 @@ int mouse_get_y();
 int mouse_get_status(); // Retorna botões clicados
 void mouse_reset_background();
 
+
 #endif
