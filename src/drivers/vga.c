@@ -1,6 +1,7 @@
 #include "../include/io.h"
 #include "../include/utils.h"
 #include "../include/font.h" 
+#include "../include/vga.h" // Importante ter o header
 
 // Memória de vídeo no modo 13h (Linear)
 uint8_t* VGA_MEMORY = (uint8_t*)0xA0000;
@@ -8,73 +9,71 @@ uint8_t* VGA_MEMORY = (uint8_t*)0xA0000;
 #define VGA_WIDTH 320
 #define VGA_HEIGHT 200
 
-// Cursor
+// Cursor e Cores
 int cursor_x = 0;
 int cursor_y = 0;
 uint8_t current_color = 15; // Branco
-uint8_t bg_color = 3;       // Azul
+uint8_t bg_color = 1;       // Azul Escuro (para diferenciar do preto de erro)
 
-// Escreve nos registros do VGA
-void write_regs(uint8_t *regs) {
-    uint8_t i;
-    uint8_t temp; 
+// --- CONFIGURAÇÃO DE HARDWARE (MODO 13h) ---
+void vga_set_mode_13h() {
+    // 1. MISC (Porta 0x3C2)
+    outb(0x3C2, 0x63);
 
-    // MISC
-    outb(0x3C2, *regs); regs++;
-    // SEQUENCER
-    for(i = 0; i < 5; i++) {
-        outb(0x3C4, i);
-        outb(0x3C5, *regs); regs++;
-    }
-    
-    // CRTC (Correção do inb/outb)
-    outb(0x3D4, 0x03); 
-    temp = inb(0x3D5);
-    outb(0x3D5, temp | 0x80);
+    // 2. SEQUENCER (Porta 0x3C4)
+    outb(0x3C4, 0); outb(0x3C5, 0x03); // Reset
+    outb(0x3C4, 1); outb(0x3C5, 0x01); // Clocking Mode
+    outb(0x3C4, 2); outb(0x3C5, 0x0F); // Map Mask
+    outb(0x3C4, 3); outb(0x3C5, 0x00); // Char Map Select
+    outb(0x3C4, 4); outb(0x3C5, 0x0E); // Memory Mode
+    outb(0x3C4, 0); outb(0x3C5, 0x03); // Run (Fim do Reset)
 
-    outb(0x3D4, 0x11); 
-    temp = inb(0x3D5);
-    outb(0x3D5, temp & ~0x80);
+    // 3. CRTC (Porta 0x3D4) - Controlador de Tubo de Raios Catódicos
+    // Destrava registradores (CRTC Register 11 bit 7)
+    outb(0x3D4, 0x11);
+    uint8_t v = inb(0x3D5);
+    outb(0x3D5, v & 0x7F); 
 
-    regs[0x03] |= 0x80;
-    regs[0x11] &= ~0x80;
-
-    for(i = 0; i < 25; i++) {
+    uint8_t crtc_vals[] = {
+        0x5F, 0x4F, 0x50, 0x82, 0x54, 0x80, 0xBF, 0x1F,
+        0x00, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x9C, 0x0E, 0x8F, 0x28, 0x40, 0x96, 0xB9, 0xA3,
+        0xFF 
+    };
+    for(int i=0; i < 25; i++) {
         outb(0x3D4, i);
-        outb(0x3D5, *regs); regs++;
+        outb(0x3D5, crtc_vals[i]);
     }
-    // GRAPHICS
-    for(i = 0; i < 9; i++) {
-        outb(0x3CE, i);
-        outb(0x3CF, *regs); regs++;
-    }
-    // ATTRIBUTE
-    for(i = 0; i < 21; i++) {
-        inb(0x3DA); 
+
+    // 4. GRAPHICS CONTROLLER (Porta 0x3CE)
+    outb(0x3CE, 0); outb(0x3CF, 0x00); // Set/Reset
+    outb(0x3CE, 1); outb(0x3CF, 0x00); // Enable Set/Reset
+    outb(0x3CE, 2); outb(0x3CF, 0x00); // Color Compare
+    outb(0x3CE, 3); outb(0x3CF, 0x00); // Data Rotate
+    outb(0x3CE, 4); outb(0x3CF, 0x00); // Read Map Select
+    outb(0x3CE, 5); outb(0x3CF, 0x40); // Mode (Bit 6 = 256 color mode)
+    outb(0x3CE, 6); outb(0x3CF, 0x05); // Misc
+    outb(0x3CE, 7); outb(0x3CF, 0x0F); // Color Don't Care
+    outb(0x3CE, 8); outb(0x3CF, 0xFF); // Bit Mask
+
+    // 5. ATTRIBUTE CONTROLLER (Porta 0x3C0)
+    uint8_t attr_vals[] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+        0x41, 0x00, 0x0F, 0x00, 0x00
+    };
+    for(int i=0; i < 21; i++) {
+        inb(0x3DA); // Reseta o flip-flop lendo o Status Register
         outb(0x3C0, i);
-        outb(0x3C0, *regs); regs++;
+        outb(0x3C0, attr_vals[i]);
     }
     inb(0x3DA);
-    outb(0x3C0, 0x20);
-}
-
-// Configuração para 320x200x256
-void vga_set_mode_13h() {
-    uint8_t regs[] = {
-        0x63, 
-        0x03, 0x01, 0x0F, 0x00, 0x0E, 
-        0x5F, 0x4F, 0x50, 0x82, 0x54, 0x80, 0xBF, 0x1F, 0x00, 0x41, 0x00, 0x00, 
-        0x00, 0x00, 0x00, 0x00, 0x9C, 0x0E, 0x8F, 0x28, 0x40, 0x96, 0xB9, 0xA3, 
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x05, 0x0F, 0xFF, 
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 
-        0x0C, 0x0D, 0x0E, 0x0F, 0x41, 0x00, 0x0F, 0x00, 0x00 
-    };
-    write_regs(regs);
+    outb(0x3C0, 0x20); // Reabilita acesso à paleta
 }
 
 // --- PRIMITIVAS DE DESENHO ---
-
 void gfx_put_pixel(int x, int y, uint8_t color) {
+    // Escreve direto na memória (mais rápido e seguro agora que a GDT funciona)
     if (x >= 0 && x < VGA_WIDTH && y >= 0 && y < VGA_HEIGHT) {
         VGA_MEMORY[y * VGA_WIDTH + x] = color;
     }
@@ -92,6 +91,7 @@ void gfx_draw_char(int x, int y, char c, uint8_t color) {
     unsigned char uc = (unsigned char)c;
     if (uc > 127) return; 
     
+    // Desenha pixel a pixel baseado na font.h
     for (int i = 0; i < 8; i++) {
         uint8_t row = font8x8[uc][i];
         for (int j = 0; j < 8; j++) {
@@ -102,7 +102,7 @@ void gfx_draw_char(int x, int y, char c, uint8_t color) {
     }
 }
 
-// --- INTEGRAÇÃO COM PRINTF ---
+// --- FUNÇÕES DE TEXTO / API ---
 
 void vga_clear() {
     gfx_fill_rect(0, 0, VGA_WIDTH, VGA_HEIGHT, bg_color);
@@ -110,7 +110,6 @@ void vga_clear() {
     cursor_y = 0;
 }
 
-// NOVA FUNÇÃO ESSENCIAL: Move o cursor de texto
 void vga_set_cursor(int x, int y) {
     cursor_x = x;
     cursor_y = y;
@@ -118,18 +117,14 @@ void vga_set_cursor(int x, int y) {
 
 void vga_putchar(char c) {
     if (c == '\n') {
-        // Apenas reseta o X, mantém o Y (ou desce linha se quiser lógica automática)
-        // Aqui vamos simplificar: Enter volta pro X inicial da "coluna" atual ou 0
-        // Para o shell, vamos deixar o X voltar para 0 relativo (vamos controlar no shell)
-        cursor_x = 18; // Margem esquerda fixa por enquanto
+        cursor_x = 18; 
         cursor_y += 8;
     } else if (c == '\b') {
         if (cursor_x >= 8) {
             cursor_x -= 8;
-            gfx_fill_rect(cursor_x, cursor_y, 8, 8, 0); // Apaga com PRETO (cor da janela)
+            gfx_fill_rect(cursor_x, cursor_y, 8, 8, bg_color); // Apaga com a cor de fundo
         }
     } else {
-        // Desenha caractere (assume fundo transparente ou preto da janela)
         gfx_draw_char(cursor_x, cursor_y, c, current_color);
         cursor_x += 8;
     }
@@ -147,31 +142,34 @@ void vga_print(const char* str) {
 
 void vga_set_color(uint8_t fg, uint8_t bg) {
     current_color = fg;
-    (void)bg; 
+    bg_color = bg; // Atualiza a cor de fundo também
 }
 
-// --- GUI (Janelas) ---
+// --- JANELAS ---
 void gfx_draw_window(char* title, int x, int y, int w, int h, uint8_t body_color) {
-    // 1. Corpo da Janela
+    // 1. Sombra (Preto)
+    gfx_fill_rect(x+2, y+2, w, h, 0); 
+
+    // 2. Corpo
     gfx_fill_rect(x, y, w, h, body_color);
     
-    // 2. Barra de Título (Cinza = 8)
-    gfx_fill_rect(x, y, w, 12, 8); 
+    // 3. Barra de Título
+    gfx_fill_rect(x, y, w, 12, 8); // Cinza Escuro (Altura aumentada para 12px para caber o botão)
     
-    // 3. Título Centralizado
+    // 4. Texto do Título
     int title_len = strlen(title);
-    int title_x = x + (w - (title_len * 8)) / 2;
+    int title_x = x + 4; // Alinhado à esquerda fica mais bonito com o botão na direita
     for(int i=0; i < title_len; i++) {
         gfx_draw_char(title_x + (i*8), y + 2, title[i], 15);
     }
 
-    // 4. Botão X
-    gfx_fill_rect(x + w - 10, y + 2, 8, 8, 4); // Vermelho
-    gfx_draw_char(x + w - 10, y + 2, 'X', 15);
-
-    // 5. Bordas Brancas
-    for(int i=x; i<x+w; i++) { gfx_put_pixel(i, y, 15); gfx_put_pixel(i, y+h, 15); }
-    for(int i=y; i<y+h; i++) { gfx_put_pixel(x, i, 15); gfx_put_pixel(x+w, i, 15); }
+    // 5. Botão FECHAR [X] (A Mágica acontece aqui)
+    // Posição: Canto direito da barra (x + largura - 10 pixels)
+    int btn_x = x + w - 10;
+    int btn_y = y + 2;
+    
+    gfx_fill_rect(btn_x, btn_y, 8, 8, 4); // Fundo Vermelho (Cor 4)
+    gfx_draw_char(btn_x, btn_y, 'X', 15); // Letra X Branca (Cor 15)
 }
 
 void video_init() {

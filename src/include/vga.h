@@ -12,7 +12,11 @@ void vga_backspace();
 // Função que faltava declarar:
 void vga_set_cursor(int x, int y);
 
+void gfx_fill_rect(int x, int y, int w, int h, uint8_t color);
+void gfx_draw_char(int x, int y, char c, uint8_t color);
+
 // API Gráfica
 void gfx_draw_window(char* title, int x, int y, int w, int h, uint8_t body_color);
+void gfx_put_pixel(int x, int y, uint8_t color);
 
 #endif

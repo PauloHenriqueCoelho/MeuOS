@@ -1,16 +1,42 @@
-#include <stdint.h>
+#include "../include/utils.h"
 
-// Calcula o tamanho de uma string
+void memory_copy(char* source, char* dest, int n) {
+    for (int i = 0; i < n; i++) {
+        *(dest + i) = *(source + i);
+    }
+}
+
 int strlen(const char* str) {
     int len = 0;
-    while (str[len])
-        len++;
+    while (str[len]) len++;
     return len;
 }
 
-// Compara duas strings
-// Retorna 0 se forem iguais
-// Retorna >0 ou <0 se forem diferentes
+void int_to_ascii(int n, char str[]) {
+    int i, sign;
+    if ((sign = n) < 0) n = -n;
+    i = 0;
+    do {
+        str[i++] = n % 10 + '0';
+    } while ((n /= 10) > 0);
+
+    if (sign < 0) str[i++] = '-';
+    str[i] = '\0';
+
+    // Inverte
+    int start = 0;
+    int end = i - 1;
+    while (start < end) {
+        char temp = str[start];
+        str[start] = str[end];
+        str[end] = temp;
+        start++;
+        end--;
+    }
+}
+
+// --- NOVAS IMPLEMENTAÇÕES ---
+
 int strcmp(const char* s1, const char* s2) {
     while (*s1 && (*s1 == *s2)) {
         s1++;
@@ -19,12 +45,16 @@ int strcmp(const char* s1, const char* s2) {
     return *(const unsigned char*)s1 - *(const unsigned char*)s2;
 }
 
-// Copia uma string (útil para mover dados)
-void strcpy(char* dest, const char* src) {
-    int i = 0;
-    while (src[i]) {
-        dest[i] = src[i];
-        i++;
+int strncmp(const char* s1, const char* s2, int n) {
+    while (n > 0 && *s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+        n--;
     }
-    dest[i] = '\0';
+    if (n == 0) return 0;
+    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
+}
+
+void strcpy(char* dest, const char* src) {
+    while ((*dest++ = *src++));
 }
