@@ -2,13 +2,12 @@
 #include "../include/io.h"
 #include "../include/vga.h"
 
-// Estruturas da IDT
+// Estruturas
 idt_entry_t idt_entries[256];
 idt_ptr_t   idt_ptr;
 
-extern void isr_generic_stub();
 extern void idt_flush(uint32_t);
-extern void isr1(); 
+extern void isr1(); // Handler do Assembly
 
 static void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
     idt_entries[num].base_lo = base & 0xFFFF;
@@ -19,17 +18,27 @@ static void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags
 }
 
 void init_pic() {
+    // Sequência mágica de inicialização do PIC (ICW)
     outb(0x20, 0x11); io_wait();
     outb(0xA0, 0x11); io_wait();
+
+    // Remapeia IRQ 0-7 para 0x20-0x27 (Para não conflitar com Exceptions 0-31)
     outb(0x21, 0x20); io_wait(); 
     outb(0xA1, 0x28); io_wait();
+
+    // Conexão Mestre/Escravo
     outb(0x21, 0x04); io_wait();
     outb(0xA1, 0x02); io_wait();
+
+    // Modo 8086
     outb(0x21, 0x01); io_wait();
     outb(0xA1, 0x01); io_wait();
 
-    // Bloqueia TODAS as interrupções (0xFF) já que o main.c vai cuidar de tudo
-    outb(0x21, 0xFF); 
+    // --- MÁSCARA DE INTERRUPÇÕES ---
+    // 0 = Ligado, 1 = Desligado.
+    // 0xFD = 1111 1101 (Só o bit 1 é ZERO).
+    // Isso significa: Bloqueia tudo, MENOS o Teclado (IRQ 1).
+    outb(0x21, 0xFD); 
     outb(0xA1, 0xFF); 
 }
 
@@ -37,19 +46,17 @@ void init_idt() {
     idt_ptr.limit = sizeof(idt_entry_t) * 256 - 1;
     idt_ptr.base  = (uint32_t)&idt_entries;
 
-    for (int i = 0; i < 256; i++) {
-        idt_set_gate(i, (uint32_t)isr_generic_stub, 0x08, 0x8E);
+    // Zera tudo primeiro
+    for (int i=0; i<256; i++) {
+        idt_set_gate(i, 0, 0, 0); 
     }
 
+    // Configura o PIC
     init_pic();
-    // Não registramos isr1 aqui para evitar conflitos, pois estamos em polling.
-    
-    idt_flush((uint32_t)&idt_ptr);
-}
 
-// Handler vazio apenas para o Linker não reclamar que a função sumiu
-void keyboard_handler_main() {
-    // Apenas lê a porta para não travar, caso seja chamado acidentalmente
-    inb(0x60);
-    outb(0x20, 0x20);
+    // Registra o teclado na posição 33 (0x20 + IRQ1 = 0x21 -> 33)
+    idt_set_gate(33, (uint32_t)isr1, 0x08, 0x8E);
+
+    // Carrega a tabela
+    idt_flush((uint32_t)&idt_ptr);
 }

@@ -1,34 +1,24 @@
 global idt_flush
 global isr1
-extern keyboard_handler_main ; Função em C que criaremos depois
+extern keyboard_handler_isr ; Nome da função C que vai receber o sinal
 
-; Carrega a IDT (semelhante ao GDT flush)
+; Carrega a tabela IDT
 idt_flush:
     mov eax, [esp+4]
     lidt [eax]
     ret
 
-; Este é o código que roda quando a tecla é pressionada (IRQ 1)
+; --- HANDLER DO TECLADO (IRQ 1) ---
 isr1:
-    cli                 ; Desabilita interrupções temporariamente
-    pusha               ; Salva TODOS os registros (EAX, EBX, etc) na pilha
+    cli                 ; 1. Desliga interrupções para não encavalar
+    pusha               ; 2. Salva todos os registradores (A, B, C, D...)
 
-    ; Opcional: Chama função C para lidar com a lógica
-    call keyboard_handler_main
+    call keyboard_handler_isr ; 3. Chama o código C
 
-    ; Envia sinal de "Recebido" (EOI) para o PIC Mestre (0x20)
-    ; Se não fizermos isso, o PIC nunca mais manda outra interrupção
+    ; 4. Envia o sinal de "Pronto" (EOI - End of Interrupt) para o PIC
     mov al, 0x20
     out 0x20, al
 
-    popa                ; Restaura os registros
-    sti                 ; Reabilita interrupções
-    iret                ; "Interrupt Return" - volta pro código que estava rodando
-
-    ; ... (código anterior do isr1 ...)
-
-global isr_generic_stub
-isr_generic_stub:
-    cli
-    hlt         ; Trava o processador para sempre
-    jmp isr_generic_stub
+    popa                ; 5. Restaura os registradores
+    sti                 ; 6. Religa interrupções
+    iret                ; 7. Volta para onde o código estava antes de você digitar

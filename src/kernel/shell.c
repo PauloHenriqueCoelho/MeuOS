@@ -1,47 +1,137 @@
+#include "../include/shell.h"
 #include "../include/utils.h"
-#include "../include/vga.h"
-#include "../include/io.h" // Para o comando reboot
+#include "../include/api.h" 
 
-void shell_execute(char* input) {
-    // Se o usuário apertou Enter sem digitar nada, ignorar
-    if (strlen(input) == 0) return;
+// --- Funções Auxiliares (Iguais a antes) ---
 
-    vga_print("\n"); // Pula linha após o comando digitado
+char* get_arg(char* input) {
+    int i = 0;
+    while(input[i] != ' ' && input[i] != '\0') i++;
+    if(input[i] == '\0') return ""; 
+    return &input[i+1];
+}
 
-    // --- COMANDO: AJUDA ---
-    if (strcmp(input, "ajuda") == 0) {
-        vga_print("Comandos disponiveis:\n");
-        vga_print("  ajuda    - Mostra esta lista\n");
-        vga_print("  limpar   - Limpa a tela\n");
-        vga_print("  reboot   - Reinicia o computador (Hardware Reset)\n");
-        vga_print("  sobre    - Informacoes do sistema\n");
-    } 
-    // --- COMANDO: LIMPAR ---
-    else if (strcmp(input, "limpar") == 0) {
-        vga_clear();
-        return; // Retorna para não imprimir nova linha extra
+int str_starts_with(char* input, char* prefix) {
+    int i = 0;
+    while(prefix[i] != '\0') {
+        if(input[i] != prefix[i]) return 0;
+        i++;
     }
-    // --- COMANDO: SOBRE ---
-    else if (strcmp(input, "sobre") == 0) {
-        vga_print("MyOS v0.1 - Kernel Modular em C\n");
-        vga_print("Desenvolvido do zero.\n");
-    }
-    // --- COMANDO: REBOOT (Magia de Hardware) ---
-    else if (strcmp(input, "reboot") == 0) {
-        vga_print("Reiniciando sistema...\n");
-        // Envia comando de reset para o Controlador de Teclado (8042)
-        // O bit 0 da porta 0x64 controla o reset da CPU.
-        uint8_t temp = inb(0x64);
-        while (temp & 0x02) temp = inb(0x64); // Espera buffer limpar
-        outb(0x64, 0xFE); // Envia pulso de reset
+    return 1;
+}
+
+void get_content_input(char* buffer) {
+    int index = 0;
+    os_print("Digite o texto e aperte ENTER:\n>> "); // Tirei cores por enquanto pra simplificar no grafico
+    
+    while(1) {
+        char c = os_wait_for_key();
         
-        // Se falhar, trava
-        asm volatile("hlt");
+        if(c == '\n') {
+            buffer[index] = '\0';
+            os_print("\n");
+            return;
+        } else if (c == '\b') {
+            if(index > 0) { 
+                index--; 
+                buffer[index]=0; 
+                os_print("\b"); // O driver VGA gráfico lida com isso apagando o quadrado
+            }
+        } else {
+            if(index < 500) {
+                char temp[2] = {c, 0};
+                os_print(temp);
+                buffer[index] = c;
+                index++;
+            }
+        }
     }
-    // --- COMANDO DESCONHECIDO ---
+}
+
+// --- Comandos ---
+
+void cmd_ajuda() {
+    os_print("--- Comandos Graficos ---\n");
+    os_print("  janela        - Cria uma janela de teste\n"); // <--- NOVO
+    os_print("  limpar        - Limpa e redesenha o shell\n");
+    os_print("--- Arquivos ---\n");
+    os_print("  ls            - Lista arquivos\n");
+    os_print("  criar [nome]  - Cria arquivo\n");
+    os_print("  cat [nome]    - Le arquivo\n");
+    os_print("  rm [nome]     - Apaga arquivo\n");
+    os_print("--- Sistema ---\n");
+    os_print("  reboot        - Reinicia\n");
+}
+
+void shell_init() {
+    // Ao iniciar, desenha a janela principal do Shell
+    // Título, X=0, Y=0, Largura=320, Altura=200, Cor=1 (Azul)
+    os_create_window("Shell do MyOS", 10, 10, 280, 160, 0);
+    
+    // Pula umas linhas para não escrever em cima da barra de título
+    os_print("\n\n"); 
+    os_print("Sistema Grafico Iniciado.\n");
+}
+
+// --- O CÉREBRO DO SHELL ---
+void shell_execute(char* input) {
+    if (strlen(input) == 0) return;
+    os_print("\n");
+
+    if (strcmp(input, "ajuda") == 0) {
+        cmd_ajuda();
+    }
+    // --- COMANDO NOVO: JANELA ---
+    else if (strcmp(input, "janela") == 0) {
+        // Cria uma janela verde (cor 2) no meio da tela para testar a API
+        os_create_window("Janela Teste", 50, 50, 150, 100, 2);
+    }
+    // --- COMANDO ATUALIZADO: LIMPAR ---
+    else if (strcmp(input, "limpar") == 0) {
+        // No modo gráfico, limpar a tela apaga a janela do shell!
+        // Então temos que limpar E redesenhar a janela.
+        os_clear_screen();
+        os_create_window("Shell do MyOS", 0, 0, 320, 200, 1);
+        os_print("\n\n");
+    }
+    else if (strcmp(input, "ls") == 0) {
+        os_file_list();
+    }
+    else if (strcmp(input, "reboot") == 0) {
+        os_reboot();
+    }
+    else if (str_starts_with(input, "cat ")) {
+        char* filename = get_arg(input);
+        char buffer[512];
+        if(os_file_read(filename, buffer)) {
+            os_print("--- Conteudo ---\n");
+            os_print(buffer);
+            os_print("\n----------------\n");
+        } else {
+            os_print("Erro: Arquivo nao encontrado.\n");
+        }
+    }
+    else if (str_starts_with(input, "rm ")) {
+        char* filename = get_arg(input);
+        if(os_file_delete(filename)) {
+            os_print("Arquivo apagado.\n");
+        } else {
+            os_print("Erro ao apagar.\n");
+        }
+    }
+    else if (str_starts_with(input, "criar ")) {
+        char* filename = get_arg(input);
+        if(strlen(filename) > 0) {
+            char content_buffer[512];
+            get_content_input(content_buffer);
+            if(os_file_create(filename, content_buffer)) {
+                os_print("Sucesso!\n");
+            } else {
+                os_print("Erro ao criar.\n");
+            }
+        }
+    }
     else {
-        vga_print("Comando desconhecido: ");
-        vga_print(input);
-        vga_print("\n");
+        os_print("Comando desconhecido.\n");
     }
 }
