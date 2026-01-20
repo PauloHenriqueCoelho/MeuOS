@@ -3,7 +3,7 @@
 #include "../include/utils.h"
 #include "../include/shell.h"
 
-// --- Mapa de Teclado (US Layout) ---
+// --- MAPA DE TECLADO (US) ---
 char kbd_US [128] =
 {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
@@ -14,43 +14,39 @@ char kbd_US [128] =
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-// --- INICIALIZAÇÃO SEGURA DO TECLADO ---
+// --- INICIALIZAÇÃO DE HARDWARE (A CORREÇÃO) ---
 void keyboard_init() {
-    // 1. Ativa a porta do teclado na placa-mãe
+    // 1. Ativa a porta PS/2 na placa-mãe
     outb(0x64, 0xAE);
     
-    // Delay simples para o hardware respirar
+    // Pequeno delay
     for(volatile int i=0; i<1000; i++) {}
 
-    // 2. Manda o comando "LIGAR" (0xF4) para o teclado
-    // Espera o buffer de comando ficar livre antes de mandar
-    while((inb(0x64) & 0x2)) {} 
+    // 2. Manda o comando "LIGAR ESCANEAMENTO" (0xF4) para o teclado
+    // Sem isso, o teclado fica mudo (que era o seu problema no polling anterior)
+    while((inb(0x64) & 0x2)) {} // Espera buffer limpar
     outb(0x60, 0xF4); 
 
-    // 3. O teclado manda um "OK" (ACK 0xFA). Vamos ler para limpar.
-    // Loop com limite para não travar o PC se falhar
+    // 3. O teclado responde com ACK (0xFA). Vamos limpar isso.
     for(int i=0; i<10000; i++) {
         if(inb(0x64) & 0x1) {
-            inb(0x60); // Lê e descarta o ACK
+            inb(0x60); // Joga fora o ACK
             break;
         }
     }
 }
 
+// Leitura manual (Não causa Triple Fault)
 char keyboard_read_polling() {
-    unsigned char status;
-    unsigned char scancode;
-
-    status = inb(0x64); // Pergunta: Tem dados?
-
+    unsigned char status = inb(0x64);
+    
+    // Se o bit 0 for 1, tem dados!
     if (status & 0x01) {
-        scancode = inb(0x60); // Lê o dado
+        unsigned char scancode = inb(0x60);
         
-        // Verifica se é tecla pressionada (bit 7 = 0)
+        // Bit 7 desligado = Tecla Pressionada
         if (!(scancode & 0x80)) {
-            if (scancode < 128) {
-                return kbd_US[scancode];
-            }
+            if (scancode < 128) return kbd_US[scancode];
         }
     }
     return 0;
@@ -59,53 +55,47 @@ char keyboard_read_polling() {
 void kernel_main() {
     vga_clear();
     
-    // NÃO carregamos GDT/IDT aqui. Vamos manter simples para não travar.
+    // --- REMOVEMOS init_gdt() e init_idt() DAQUI ---
+    // Eles estavam causando o "CPU Reset" e tela preta.
     
-    vga_print("=== MyOS Shell (Modo Polling) ===\n");
+    vga_print("=== MyOS Shell (Modo Polling + Hardware Fix) ===\n");
     vga_print("Inicializando teclado...\n");
     
-    keyboard_init(); // Ativa o hardware
+    keyboard_init(); // Ativa o hardware corretamente
     
-    vga_print("Teclado Ativo. Digite 'ajuda':\n");
+    vga_print("Teclado Ativo. Digite 'ajuda' e aperte ENTER:\n");
     vga_print("> ");
 
     char buffer[256];
     int index = 0;
-    
-    // Limpa buffer
     for(int i=0; i<256; i++) buffer[i] = 0;
 
     while(1) {
         char c = keyboard_read_polling();
 
         if (c != 0) {
-            // ENTER
-            if (c == '\n') {
+            if (c == '\n') { // ENTER
                 buffer[index] = '\0';
                 shell_execute(buffer);
-                
                 index = 0;
                 for(int i=0; i<256; i++) buffer[i] = 0;
                 vga_print("\n> ");
             } 
-            // BACKSPACE
-            else if (c == '\b') {
+            else if (c == '\b') { // BACKSPACE
                 if (index > 0) {
                     index--;
                     buffer[index] = 0;
                     vga_backspace(); 
                 }
             }
-            // CARACTERES
-            else {
+            else { // CARACTERES
                 if (index < 255) {
                     vga_putchar(c);
                     buffer[index] = c;
                     index++;
                 }
             }
-            
-            // Delay para evitar repetição
+            // Delay anti-repetição
             for(volatile int i=0; i<100000; i++) {}
         }
     }
