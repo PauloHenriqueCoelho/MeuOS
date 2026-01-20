@@ -54,6 +54,10 @@ void os_create_window(char* title, int x, int y, int w, int h, uint8_t color) {
     gfx_draw_window(title, x, y, w, h, color);
 }
 
+void os_set_cursor(int x, int y) {
+    vga_set_cursor(x, y);
+}
+
 // --- SYSTEM ---
 void os_reboot() { 
     outb(0x64, 0xFE); 

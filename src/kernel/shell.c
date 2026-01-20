@@ -1,6 +1,7 @@
 #include "../include/shell.h"
 #include "../include/utils.h"
 #include "../include/api.h" 
+#include "../include/vga.h" // Adicione vga.h para usar vga_set_cursor direto
 
 // --- Funções Auxiliares (Iguais a antes) ---
 
@@ -64,13 +65,14 @@ void cmd_ajuda() {
 }
 
 void shell_init() {
-    // Ao iniciar, desenha a janela principal do Shell
-    // Título, X=0, Y=0, Largura=320, Altura=200, Cor=1 (Azul)
-    os_create_window("Shell do MyOS", 10, 10, 280, 160, 0);
+    // Desenha janela preta (0)
+    os_create_window("Shell MyOS", 10, 10, 300, 180, 0);
     
-    // Pula umas linhas para não escrever em cima da barra de título
-    os_print("\n\n"); 
-    os_print("Sistema Grafico Iniciado.\n");
+    // Usa vga_set_cursor direto para evitar problemas de API por enquanto
+    vga_set_cursor(18, 30);
+    
+    os_print("MyOS Grafico v1.0\n");
+    os_print("Sistema Carregado.\n");
 }
 
 // --- O CÉREBRO DO SHELL ---
@@ -92,6 +94,7 @@ void shell_execute(char* input) {
         // Então temos que limpar E redesenhar a janela.
         os_clear_screen();
         os_create_window("Shell do MyOS", 0, 0, 320, 200, 1);
+        os_set_cursor(18, 30); // <--- Importante resetar o cursor aqui também
         os_print("\n\n");
     }
     else if (strcmp(input, "ls") == 0) {

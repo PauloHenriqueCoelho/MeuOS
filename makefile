@@ -42,7 +42,9 @@ build/arch/%.o: src/arch/x86/%.asm
 
 # O 'run' agora depende do 'disk.img'
 run: $(KERNEL_BIN) disk.img
-	qemu-system-i386 -kernel $(KERNEL_BIN) -hda disk.img -display cocoa
+	qemu-system-i386 -kernel $(KERNEL_BIN) -hda disk.img -display cocoa \
+	-d int,cpu_reset,guest_errors \
+    -no-reboot -no-shutdown -serial stdio
 
 clean:
 	rm -rf build disk.img

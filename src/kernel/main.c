@@ -2,35 +2,39 @@
 #include "../include/io.h"
 #include "../include/utils.h"
 #include "../include/shell.h"
-#include "../include/gdt.h" // Se tiver GDT
-#include "../include/idt.h" // <--- Importante
+#include "../include/gdt.h" // GDT é essencial para estabilidade
+#include "../include/idt.h"
 #include "../include/keyboard.h"
 
-// O Linker procura por kernel_main
 void kernel_main() {
-    video_init();    
-    // 1. Inicializa tabelas
-    // init_gdt(); // Se você tiver o arquivo gdt.c funcionando, descomente
-    init_idt();   // Configura o PIC e a Tabela de Interrupções
+    // 1. VÍDEO (Fundo Azul/Ciano)
+    video_init();
     
-    // 2. Inicializa Hardware
-    keyboard_init();
-    shell_init();
+    // 2. MEMÓRIA (GDT)
+    // Isso é obrigatório para as interrupções funcionarem sem crashar!
+    init_gdt();
 
-    // 3. Habilita INTERRUPÇÕES (A Chave Mestra)
-    // A partir daqui, se apertar tecla, o 'isr1' no assembly acorda
+    // 3. INTERFACE (Desenha a Janela Preta)
+    // Fazemos isso AGORA. Se o sistema travar depois, a janela já estará na tela.
+    shell_init(); 
+    
+    // 4. HARDWARE (Interrupções e Teclado)
+    init_idt();
+    keyboard_init();
+    
+    // 5. Habilita a CPU
     __asm__ volatile("sti");
 
-    vga_print("=== MyOS v0.6 (Interrupt Driven) ===\n");
-    vga_print("CPU Ociosa (HLT) ativada.\n");
-    vga_print("> ");
-
+    // Loop Principal
     char buffer[256];
     int index = 0;
     for(int i=0; i<256; i++) buffer[i] = 0;
+    
+    // Posiciona o prompt dentro da janela (ajuste conforme necessário)
+    vga_set_cursor(20, 50); 
+    vga_print("> ");
 
     while(1) {
-        // Agora isso pega do buffer, não da porta direta!
         char c = keyboard_get_key();
 
         if (c != 0) {
@@ -39,6 +43,8 @@ void kernel_main() {
                 shell_execute(buffer);
                 index = 0;
                 for(int i=0; i<256; i++) buffer[i] = 0;
+                
+                // Prompt nova linha
                 vga_print("\n> ");
             } 
             else if (c == '\b') {
@@ -48,7 +54,7 @@ void kernel_main() {
                if (index < 255) { vga_putchar(c); buffer[index] = c; index++; }
             }
         } else {
-            // Se não tem tecla, dorme até a próxima interrupção
+            // Economiza energia quando ocioso
             __asm__ volatile("hlt");
         }
     }

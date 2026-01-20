@@ -110,31 +110,31 @@ void vga_clear() {
     cursor_y = 0;
 }
 
+// NOVA FUNÇÃO ESSENCIAL: Move o cursor de texto
+void vga_set_cursor(int x, int y) {
+    cursor_x = x;
+    cursor_y = y;
+}
+
 void vga_putchar(char c) {
     if (c == '\n') {
-        cursor_x = 0;
+        // Apenas reseta o X, mantém o Y (ou desce linha se quiser lógica automática)
+        // Aqui vamos simplificar: Enter volta pro X inicial da "coluna" atual ou 0
+        // Para o shell, vamos deixar o X voltar para 0 relativo (vamos controlar no shell)
+        cursor_x = 18; // Margem esquerda fixa por enquanto
         cursor_y += 8;
     } else if (c == '\b') {
-        // Lógica de Backspace Visual
         if (cursor_x >= 8) {
             cursor_x -= 8;
-            gfx_fill_rect(cursor_x, cursor_y, 8, 8, bg_color);
+            gfx_fill_rect(cursor_x, cursor_y, 8, 8, 0); // Apaga com PRETO (cor da janela)
         }
     } else {
+        // Desenha caractere (assume fundo transparente ou preto da janela)
         gfx_draw_char(cursor_x, cursor_y, c, current_color);
         cursor_x += 8;
     }
-
-    if (cursor_x >= VGA_WIDTH) {
-        cursor_x = 0;
-        cursor_y += 8;
-    }
-    if (cursor_y >= VGA_HEIGHT) {
-        vga_clear();
-    }
 }
 
-// --- CORREÇÃO: Implementação de Backspace para o Main ---
 void vga_backspace() {
     vga_putchar('\b');
 }
@@ -150,28 +150,26 @@ void vga_set_color(uint8_t fg, uint8_t bg) {
     (void)bg; 
 }
 
-// --- GUI ---
+// --- GUI (Janelas) ---
 void gfx_draw_window(char* title, int x, int y, int w, int h, uint8_t body_color) {
-    // 1. Corpo
+    // 1. Corpo da Janela
     gfx_fill_rect(x, y, w, h, body_color);
     
-    // 2. Barra
-    gfx_fill_rect(x, y, w, 12, 8); // Cinza
+    // 2. Barra de Título (Cinza = 8)
+    gfx_fill_rect(x, y, w, 12, 8); 
     
-    // 3. Título
+    // 3. Título Centralizado
     int title_len = strlen(title);
     int title_x = x + (w - (title_len * 8)) / 2;
     for(int i=0; i < title_len; i++) {
-        // CORREÇÃO AQUI: Removemos o 5º argumento (cor de fundo), 
-        // pois gfx_draw_char só aceita 4.
         gfx_draw_char(title_x + (i*8), y + 2, title[i], 15);
     }
 
     // 4. Botão X
-    gfx_fill_rect(x + w - 10, y + 2, 8, 8, 4);
+    gfx_fill_rect(x + w - 10, y + 2, 8, 8, 4); // Vermelho
     gfx_draw_char(x + w - 10, y + 2, 'X', 15);
 
-    // 5. Bordas
+    // 5. Bordas Brancas
     for(int i=x; i<x+w; i++) { gfx_put_pixel(i, y, 15); gfx_put_pixel(i, y+h, 15); }
     for(int i=y; i<y+h; i++) { gfx_put_pixel(x, i, 15); gfx_put_pixel(x+w, i, 15); }
 }
