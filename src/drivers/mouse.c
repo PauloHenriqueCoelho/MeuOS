@@ -65,53 +65,49 @@ void mouse_reset_background() {
 }
 
 // --- DESENHO DO CURSOR ---
+// No arquivo src/drivers/mouse.c
+
 void draw_mouse_cursor() {
     uint8_t* vga = (uint8_t*)0xA0000;
 
-    // 1. Restaura fundo antigo (se válido)
+    // 1. RESTAURA o fundo antigo (apaga o mouse da posição anterior)
     if (!first_draw && !background_invalid) {
         for(int y=0; y<BUFFER_H; y++) {
             for(int x=0; x<BUFFER_W; x++) {
-                int screen_x = mouse_last_x + x;
-                int screen_y = mouse_last_y + y;
-                if (screen_x < 320 && screen_y < 200) {
-                    gfx_put_pixel(screen_x, screen_y, mouse_bg_buffer[y*BUFFER_W + x]);
+                int old_screen_x = mouse_last_x + x;
+                int old_screen_y = mouse_last_y + y;
+                if (old_screen_x < 320 && old_screen_y < 200) {
+                    vga[old_screen_y * 320 + old_screen_x] = mouse_bg_buffer[y*BUFFER_W + x];
                 }
             }
         }
     }
-    
-    first_draw = 0;
-    background_invalid = 0; 
 
-    // 2. Salva novo fundo
+    // 2. SALVA o novo fundo (onde o mouse está agora)
     for(int y=0; y<BUFFER_H; y++) {
         for(int x=0; x<BUFFER_W; x++) {
-            int screen_x = mouse_x + x;
-            int screen_y = mouse_y + y;
-            int offset = screen_y * 320 + screen_x;
-            
-            if (screen_x < 320 && screen_y < 200) {
-                mouse_bg_buffer[y*BUFFER_W + x] = vga[offset];
-            } else {
-                mouse_bg_buffer[y*BUFFER_W + x] = 0; 
+            int new_screen_x = mouse_x + x;
+            int new_screen_y = mouse_y + y;
+            if (new_screen_x < 320 && new_screen_y < 200) {
+                mouse_bg_buffer[y*BUFFER_W + x] = vga[new_screen_y * 320 + new_screen_x];
             }
         }
     }
 
-    // 3. Desenha Cursor (Bitmap)
+    // 3. DESENHA o cursor por cima
     for(int y=0; y<CURSOR_HEIGHT; y++) {
         for(int x=0; x<CURSOR_WIDTH; x++) {
-            uint8_t pixel_type = mouse_bitmap[y][x];
-            if (pixel_type == 1) gfx_put_pixel(mouse_x + x, mouse_y + y, 0); // Preto
-            else if (pixel_type == 2) gfx_put_pixel(mouse_x + x, mouse_y + y, 15); // Branco
+            uint8_t pixel = mouse_bitmap[y][x];
+            if (pixel == 1) vga_plot_pixel(mouse_x + x, mouse_y + y, 0);  // Borda
+            else if (pixel == 2) vga_plot_pixel(mouse_x + x, mouse_y + y, 15); // Interior
         }
     }
-    
+
     mouse_last_x = mouse_x;
     mouse_last_y = mouse_y;
+    background_invalid = 0;
+    first_draw = 0;
 }
-
 // --- HANDLER ---
 void mouse_handler_isr() {
     uint8_t status = inb(0x64);
@@ -137,7 +133,6 @@ void mouse_handler_isr() {
             if (mouse_y > 200 - CURSOR_HEIGHT) mouse_y = 200 - CURSOR_HEIGHT;
 
             mouse_buttons = mouse_byte[0] & 0x07;
-            draw_mouse_cursor();
             mouse_cycle = 0; break;
     }
 }

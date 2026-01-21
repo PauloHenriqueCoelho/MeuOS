@@ -208,12 +208,19 @@ void vga_print_at(int x, int y, char* str, uint8_t color) {
     vga_print(str); 
 }
 
+// No arquivo src/drivers/vga.c
 void gfx_draw_cursor(int x, int y) {
-    // Desenha um triângulo branco simples para o cursor
+    // Desenha uma seta branca simples com borda preta
+    // Usando 15 para branco e 0 para preto
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j <= i; j++) {
-            vga_plot_pixel(x + j, y + i, 15); // 15 = Branco
+            vga_plot_pixel(x + j, y + i, 15);
         }
+    }
+    // Opcional: desenha uma linha preta na borda da seta para visibilidade
+    for (int i = 0; i < 8; i++) {
+        vga_plot_pixel(x + i, y + i, 0);
+        vga_plot_pixel(x, y + i, 0);
     }
 }
 

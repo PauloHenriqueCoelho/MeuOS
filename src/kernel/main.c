@@ -29,6 +29,7 @@ void draw_clock() {
 
 
 void kernel_main() {
+    int last_mx = 0, last_my = 0; // Adicione no topo da kernel_main
     init_gdt(); video_init(); init_idt(); keyboard_init(); mouse_init(); wm_init(); init_timer(100);
     pmm_init(128 * 1024 * 1024);
     paging_init();
@@ -47,6 +48,12 @@ void kernel_main() {
         int my = mouse_get_y();
         int click = (mouse_get_status() & 1);
         int redraw_needed = 0;
+
+        if (mx != last_mx || my != last_my) {
+            draw_mouse_cursor();
+            last_mx = mx;
+            last_my = my;
+        }
 
         // --- ARRASTE ---
         if (dragging_window_id != WIN_ID_NONE) {
@@ -128,8 +135,8 @@ void kernel_main() {
         // Se o redraw_needed for 1, a tela será atualizada e a janela nova 
         // aparecerá no topo instantaneamente.
         if (redraw_needed) {
-            mouse_reset_background();
             refresh_screen();
+            draw_mouse_cursor(); // Redesenha o mouse por cima do novo cenário
             redraw_needed = 0; // Reseta para não pesar a CPU
         }
         

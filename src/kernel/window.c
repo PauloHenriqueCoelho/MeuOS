@@ -24,6 +24,7 @@ void wm_focus(int id) {
 
 void refresh_screen() {
     // 1. Desenha o fundo (Desktop, ícones e papel de parede)
+    mouse_reset_background();
     desktop_draw();
     
     // 2. Desenha as janelas de fundo
@@ -39,41 +40,48 @@ void refresh_screen() {
     if (active_win && active_win->active) {
         wm_draw_one(active_win);
     }
-
-    // 4. DESENHA O MOUSE (A camada mais alta de todas)
-    // Usamos as funções do seu driver de mouse
-    int mx = mouse_get_x();
-    int my = mouse_get_y();
-    
-    // Aqui você usa sua função de desenho de cursor ou uma simples:
-    gfx_draw_cursor(mx, my); 
-
 }
 
 int wm_wait_click(int win_id) {
     Window* w = wm_get(win_id);
     if (!w) return -1;
 
-    uint32_t last_sync = 0;
+    int last_mx = mouse_get_x();
+    int last_my = mouse_get_y();
+    uint32_t last_sync = get_tick();
 
     while (1) {
-        // LIMITADOR DE FPS: Só redesenha se passou tempo suficiente (aprox. 16ms)
+        int mx = mouse_get_x();
+        int my = mouse_get_y();
+
+        // --- MOVIMENTO LEVE DO MOUSE ---
+        if (mx != last_mx || my != last_my) {
+            draw_mouse_cursor(); // Desenha usando o buffer (leve)
+            last_mx = mx;
+            last_my = my;
+        }
+
+        // --- REDESENHO PESADO (LIMITADO A ~30 FPS para evitar lag) ---
         uint32_t current_tick = get_tick();
-        if (current_tick > last_sync) {
-            refresh_screen();
-            last_sync = current_tick + 1; // Ajuste conforme a velocidade do seu timer
+        if (current_tick >= last_sync + 3) { // +3 ticks = 30ms (aprox 33 FPS)
+            refresh_screen();    // Redesenha as janelas
+            draw_mouse_cursor(); // Redesenha o mouse por cima do novo fundo
+            last_sync = current_tick;
         }
 
         if (mouse_get_status() & 1) {
-            int mx = mouse_get_x();
-            int my = mouse_get_y();
-            
+            // ... lógica de colisão dos botões ...
             for (int i = 0; i < w->button_count; i++) {
                 Button* b = &w->buttons[i];
                 if (mx >= (w->x + b->x) && mx <= (w->x + b->x + b->w) &&
                     my >= (w->y + b->y) && my <= (w->y + b->y + b->h)) {
-                    
-                    while(mouse_get_status() & 1) refresh_screen();
+                    while(mouse_get_status() & 1) {
+                        // Enquanto segura o clique, mantém o mouse atualizando
+                        if (mouse_get_x() != mx || mouse_get_y() != my) {
+                            draw_mouse_cursor();
+                            mx = mouse_get_x(); my = mouse_get_y();
+                        }
+                    }
                     return b->id;
                 }
             }
