@@ -10,6 +10,8 @@
 #include "../include/api.h"
 #include "../include/window.h"
 #include "../include/timer.h"
+#include "../include/memory.h" // Adicione este include
+#include "../include/paging.h"  // <--- ADICIONE ESTA LINHA AQUI
 
 int dragging_window_id = WIN_ID_NONE;
 int drag_offset_x = 0, drag_offset_y = 0;
@@ -24,28 +26,12 @@ void draw_clock() {
     vga_set_cursor(275, 189); vga_print(time_str);
 }
 
-void refresh_screen() {
-    desktop_draw();
-    
-    // 1. Desenha TODAS as janelas ativas que NÃO são a focada
-    for (int i=0; i<MAX_WINDOWS; i++) {
-        Window* w = wm_get(i);
-        if (w && w->active && i != current_app_id) {
-            wm_draw_one(i);
-        }
-    }
 
-    // 2. Desenha a janela focada POR ÚLTIMO (para ficar em cima)
-    if (current_app_id != WIN_ID_NONE) {
-        Window* w = wm_get(current_app_id);
-        if (w && w->active) {
-            wm_draw_one(current_app_id);
-        }
-    }
-}
 
 void kernel_main() {
     init_gdt(); video_init(); init_idt(); keyboard_init(); mouse_init(); wm_init(); init_timer(100);
+    pmm_init(128 * 1024 * 1024);
+    paging_init();
     __asm__ volatile("sti");
 
     refresh_screen();

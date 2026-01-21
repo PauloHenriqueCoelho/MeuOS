@@ -18,5 +18,9 @@ void gfx_draw_char(int x, int y, char c, uint8_t color);
 // API Gráfica
 void gfx_draw_window(char* title, int x, int y, int w, int h, uint8_t body_color);
 void gfx_put_pixel(int x, int y, uint8_t color);
+void gfx_draw_button(char* label, int x, int y, int w, int h, uint8_t color);
+void vga_print_at(int x, int y, char* str, uint8_t color);
+void gfx_draw_cursor(int x, int y);
+void vga_plot_pixel(int x, int y, uint8_t color);
 
 #endif

@@ -2,8 +2,9 @@
 #include "../include/utils.h"
 #include "../include/vga.h"
 #include "../include/programs.h"
+#include "../include/mouse.h" // <--- IMPORTANTE: Adicione este include!
 #include "../include/shell.h" // Precisa acessar shell_draw
-
+#include "../include/timer.h" // <--- ADICIONE ESTA LINHA
 Window windows[MAX_WINDOWS];
 int current_app_id = WIN_ID_NONE; // Define a variável global aqui
 
@@ -16,6 +17,68 @@ void wm_init() {
 void wm_focus(int id) {
     if (id >= 0 && id < MAX_WINDOWS) {
         current_app_id = id;
+    }
+}
+
+// No arquivo src/kernel/window.c
+
+void refresh_screen() {
+    // 1. Desenha o fundo (Desktop, ícones e papel de parede)
+    desktop_draw();
+    
+    // 2. Desenha as janelas de fundo
+    for (int i = 0; i < MAX_WINDOWS; i++) {
+        Window* w = wm_get(i);
+        if (w && w->active && i != current_app_id) {
+            wm_draw_one(w);
+        }
+    }
+
+    // 3. Desenha a janela com foco (sempre por cima das outras)
+    Window* active_win = wm_get(current_app_id);
+    if (active_win && active_win->active) {
+        wm_draw_one(active_win);
+    }
+
+    // 4. DESENHA O MOUSE (A camada mais alta de todas)
+    // Usamos as funções do seu driver de mouse
+    int mx = mouse_get_x();
+    int my = mouse_get_y();
+    
+    // Aqui você usa sua função de desenho de cursor ou uma simples:
+    gfx_draw_cursor(mx, my); 
+
+}
+
+int wm_wait_click(int win_id) {
+    Window* w = wm_get(win_id);
+    if (!w) return -1;
+
+    uint32_t last_sync = 0;
+
+    while (1) {
+        // LIMITADOR DE FPS: Só redesenha se passou tempo suficiente (aprox. 16ms)
+        uint32_t current_tick = get_tick();
+        if (current_tick > last_sync) {
+            refresh_screen();
+            last_sync = current_tick + 1; // Ajuste conforme a velocidade do seu timer
+        }
+
+        if (mouse_get_status() & 1) {
+            int mx = mouse_get_x();
+            int my = mouse_get_y();
+            
+            for (int i = 0; i < w->button_count; i++) {
+                Button* b = &w->buttons[i];
+                if (mx >= (w->x + b->x) && mx <= (w->x + b->x + b->w) &&
+                    my >= (w->y + b->y) && my <= (w->y + b->y + b->h)) {
+                    
+                    while(mouse_get_status() & 1) refresh_screen();
+                    return b->id;
+                }
+            }
+        }
+        __asm__ volatile("pause");
     }
 }
 
@@ -55,49 +118,38 @@ Window* wm_get(int id) {
 }
 
 // --- DESENHO CENTRALIZADO ---
-void wm_draw_one(int id) {
-    if (!windows[id].active) return;
-    
-    Window* w = &windows[id];
+void wm_draw_one(Window* w) {
+    if (!w || !w->active) return;
 
-    // Tipo 1: Shell (Delegamos para o shell.c mas passando as coords)
+    // 1. Desenha a moldura e o fundo da janela
+    gfx_draw_window(w->title, w->x, w->y, w->w, w->h, w->color);
+
+    // 2. DESENHA O CONTEÚDO (O que estava faltando!)
     if (w->type == TYPE_SHELL) {
-        shell_draw(); 
-    }
-    // Tipo 2: Calculadora
-    else if (w->type == TYPE_CALC) {
-        calculator_draw();
-    }
-    // Tipo 3: Janela de Texto Genérica (cat, msgbox)
+        // Passamos a janela para o shell saber onde desenhar o texto
+        shell_draw(w); 
+    } 
     else if (w->type == TYPE_TEXT) {
-        // 1. Desenha a Janela Base
-        gfx_draw_window(w->title, w->x, w->y, w->w, w->h, w->color);
+        // CORREÇÃO PARA MULTILINHAS:
+        int cur_x = w->x + 8;
+        int cur_y = w->y + 20;
+        char* ptr = w->buffer;
         
-        // 2. Desenha o Conteúdo do Buffer
-        // Ajuste de margem (X+10, Y+25)
-        int cur_x = w->x + 10;
-        int cur_y = w->y + 25;
-        
-        vga_set_color(15, w->color); // Branco sobre cor da janela
-        
-        // Simples renderizador de texto com quebra de linha manual
-        int i = 0;
-        int line_offset = 0;
-        while(w->buffer[i]) {
-            if (w->buffer[i] == '\n') {
-                line_offset += 10; // Próxima linha
-                cur_x = w->x + 10; // Reset X
+        while (*ptr) {
+            if (*ptr == '\n') {
+                cur_y += 10;     // Pula linha
+                cur_x = w->x + 8; // Volta para o X da JANELA, não da tela!
             } else {
-                gfx_draw_char(cur_x, cur_y + line_offset, w->buffer[i], 15);
+                gfx_draw_char(cur_x, cur_y, *ptr, 0); // Desenha caractere
                 cur_x += 8;
-                // Quebra automática se bater na borda
-                if (cur_x > w->x + w->w - 10) {
-                     line_offset += 10;
-                     cur_x = w->x + 10;
-                }
             }
-            i++;
+            ptr++;
         }
+    }
+    // 3. Desenha os botões por cima de tudo
+    for (int i = 0; i < w->button_count; i++) {
+        Button* b = &w->buttons[i];
+        gfx_draw_button(b->label, w->x + b->x, w->y + b->y, b->w, b->h, 7);
     }
 }
 

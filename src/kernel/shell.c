@@ -18,19 +18,18 @@ void shell_init() {
 }
 
 // Esta é a função que o Linker não estava encontrando
-void shell_draw() {
-    Window* w = wm_get(WIN_ID_SHELL);
+void shell_draw(Window* w) {
     if (!w) return;
 
-    os_create_window("Terminal", w->x, w->y, w->w, w->h, 0);
+    // Definimos onde o texto começa dentro da janela (margens)
+    int start_x = w->x + 8;
+    int start_y = w->y + 20;
 
-    int text_x = w->x + 10;
-    int text_y = w->y + 30;
+    // Desenha o Prompt
+    vga_print_at(start_x, start_y, "> ", 10); // 10 = Verde para o prompt
 
-    vga_set_cursor(text_x, text_y);
-    vga_set_color(15, 0); 
-    vga_print("> ");
-    vga_print(shell_buffer);
+    // Desenha o que o usuário está digitando (o buffer do shell)
+    vga_print_at(start_x + 16, start_y, shell_buffer, 15); // 15 = Branco
 }
 
 void shell_handle_key(char c) {
@@ -40,13 +39,11 @@ void shell_handle_key(char c) {
         shell_execute(shell_buffer);
         shell_cursor_pos = 0;
         for(int i=0; i<256; i++) shell_buffer[i] = 0;
-        shell_draw();
     }
     else if (c == '\b') {
         if (shell_cursor_pos > 0) {
             shell_cursor_pos--;
             shell_buffer[shell_cursor_pos] = 0;
-            shell_draw(); 
         }
     }
     else {
@@ -55,11 +52,6 @@ void shell_handle_key(char c) {
             shell_cursor_pos++;
             shell_buffer[shell_cursor_pos] = 0; 
             
-            Window* w = wm_get(WIN_ID_SHELL);
-            int prompt_size = 2 * 8; 
-            int text_offset = (shell_cursor_pos - 1) * 8;
-            vga_set_cursor(w->x + 10 + prompt_size + text_offset, w->y + 30);
-            vga_putchar(c);
         }
     } 
 }
@@ -77,7 +69,6 @@ void shell_execute(char* command) {
     }
     // LIMPAR
     else if (strcmp(command, "limpar") == 0) {
-        shell_draw();
     }
     // MKFILE
     else if (strncmp(command, "mkfile ", 7) == 0) {
@@ -115,7 +106,6 @@ void shell_execute(char* command) {
     }
     else if (strncmp(command, "exec ", 5) == 0) {
     char* filename = get_argument(command);
-    os_msgbox("Ajuda", "ls: Listar\ntouch: Criar\ncat: Ler\nrm: Apagar\nreboot: Reiniciar");
     os_execute_bin(filename);
 }
     // LS

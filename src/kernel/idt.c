@@ -53,22 +53,20 @@ void init_pic() {
 void init_idt() {
     idt_ptr.limit = sizeof(idt_entry_t) * 256 - 1;
     idt_ptr.base  = (uint32_t)&idt_entries;
-    idt_set_gate(128, (uint32_t)isr128, 0x08, 0xEE);
 
-    // Limpa IDT
+    // 1. PRIMEIRO: Limpa a IDT inteira
     for (int i=0; i<256; i++) {
         idt_set_gate(i, 0, 0, 0); 
     }
 
+    // 2. DEPOIS: Registra os handlers reais
     init_pic();
-    idt_set_gate(32, (uint32_t)isr0, 0x08, 0x8E);
-
-    // Registra Teclado (Int 33 = 0x20 + 1)
-    idt_set_gate(33, (uint32_t)isr1, 0x08, 0x8E);
+    idt_set_gate(32, (uint32_t)isr0, 0x08, 0x8E);  // Timer
+    idt_set_gate(33, (uint32_t)isr1, 0x08, 0x8E);  // Teclado
+    idt_set_gate(44, (uint32_t)isr12, 0x08, 0x8E); // Mouse
     
-    // Registra Mouse (Int 44 = 0x20 + 0x08 start do slave + 4 offset = 44)
-    // IRQ 12 mapeia para interrupção 44 (0x2C)
-    idt_set_gate(44, (uint32_t)isr12, 0x08, 0x8E);
+    // Registra a Syscall (0x80 = 128)
+    idt_set_gate(128, (uint32_t)isr128, 0x08, 0xEE); 
 
     idt_flush((uint32_t)&idt_ptr);
 }

@@ -176,3 +176,60 @@ void video_init() {
     vga_set_mode_13h();
     vga_clear();
 }
+
+void gfx_draw_button(char* label, int x, int y, int w, int h, uint8_t color) {
+    // 1. Fundo principal do botão
+    gfx_fill_rect(x, y, w, h, color);
+
+    // 2. Efeito 3D (Bordas)
+    // Borda superior e esquerda branca (luz)
+    gfx_fill_rect(x, y, w, 1, 15); 
+    gfx_fill_rect(x, y, 1, h, 15);
+    
+    // Borda inferior e direita preta (sombra)
+    gfx_fill_rect(x, y + h - 1, w, 1, 0);
+    gfx_fill_rect(x + w - 1, y, 1, h, 0);
+
+    // 3. Desenhar o Texto (Centralizado)
+    // Se você tiver a função vga_print_at ou similar:
+    int label_len = strlen(label);
+    int text_x = x + (w / 2) - (label_len * 4); // Ajuste fino para 8px por char
+    int text_y = y + (h / 2) - 4;
+    
+    // Use sua função de desenho de caracteres aqui
+    for(int i = 0; label[i] != '\0'; i++) {
+        gfx_draw_char(text_x + (i * 8), text_y, label[i], 0); // Texto preto
+    }
+}
+
+void vga_print_at(int x, int y, char* str, uint8_t color) {
+    vga_set_cursor(x, y);
+    // Assumindo que sua vga_print aceita cor ou usa uma global
+    vga_print(str); 
+}
+
+void gfx_draw_cursor(int x, int y) {
+    // Desenha um triângulo branco simples para o cursor
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j <= i; j++) {
+            vga_plot_pixel(x + j, y + i, 15); // 15 = Branco
+        }
+    }
+}
+
+void vga_put_pixel(int x, int y, uint8_t color) {
+    uint8_t* screen = (uint8_t*)0xA0000; // Endereço padrão do Modo 13h
+    screen[y * 320 + x] = color;
+}
+// No arquivo src/drivers/vga.c
+
+void vga_plot_pixel(int x, int y, uint8_t color) {
+    // Proteção básica para não escrever fora da memória VGA (320x200)
+    if (x < 0 || x >= 320 || y < 0 || y >= 200) return;
+
+    // Endereço base da memória de vídeo em modo 13h
+    uint8_t* vga_mem = (uint8_t*)0xA0000;
+    
+    // A fórmula mágica: cada linha tem 320 pixels
+    vga_mem[y * 320 + x] = color;
+}

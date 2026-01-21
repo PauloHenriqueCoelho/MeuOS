@@ -1,24 +1,24 @@
 #include "../include/fs.h"
 #include "../include/api.h"
+#include "../include/paging.h" // Adicione este include
+#include "../include/memory.h" // Adicione este include
 
 // Definimos um endereço de memória seguro para carregar o programa (ex: 1MB acima do Kernel)
-#define USER_PROGRAM_ADDRESS 0x50000
-
 void os_execute_bin(char* filename) {
-    // 1. Carregar o binário do sistema de ficheiros para a RAM
-    // Usamos a tua função fs_read_to_buffer
-    if (fs_read_to_buffer(filename, (char*)USER_PROGRAM_ADDRESS)) {
+    // Aloca endereço FÍSICO
+    void* phys_address = pmm_alloc_block();
+    
+    if (fs_read_to_buffer(filename, (char*)phys_address)) {
+        // Mapeia Virtual 0x400000 para o Físico obtido
+        paging_map_page(0x400000, (uint32_t)phys_address, kernel_page_directory);
         
-        os_print(" -> A executar binario...\n");
-
-        // 2. Criar um ponteiro de função para o endereço do programa
-        void (*program_entry)() = (void (*)())USER_PROGRAM_ADDRESS;
-
-        // 3. Saltar para o programa!
+        // Executa no endereço VIRTUAL
+        void (*program_entry)() = (void (*)())0x400000;
         program_entry();
-
-        os_print("\n -> Programa terminado.\n");
+        
+        os_print("\n -> Programa concluido.\n");
     } else {
-        os_print(" [Erro] Nao foi possivel carregar o binario.\n");
+        pmm_free_block(phys_address);
+        os_print(" [Erro] Arquivo nao encontrado.\n");
     }
 }
