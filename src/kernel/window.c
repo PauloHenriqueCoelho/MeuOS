@@ -55,6 +55,7 @@ void wm_update_button(int win_id, int btn_id, char* new_text) {
             // Copia o novo texto para o botão (Cuidado com overflow aqui no futuro!)
             // Assumindo que você tem strcpy no utils.h
             strcpy(w->buttons[i].label, new_text);
+            wm_draw_one(w); // Força o redesenho IMEDIATO da janela!
             return;
         }
     }
@@ -90,12 +91,14 @@ int wm_wait_click(int win_id) {
     return WIN_ID_NONE;  // Nunca chega aqui, mas para complacência
 }
 // Cria/Registra uma janela. Tenta achar slot livre.
-int wm_create(int type, char* title, int x, int y, int w, int h, uint8_t color) {
+int wm_create(int type, char* title, int x, int y, int w, int h, uint32_t color) {
     int id = -1;
 
+    // Lógica de slot fixo para Shell(0) e Calc(1)
     if (type == TYPE_SHELL) id = 0;
     else if (type == TYPE_CALC) id = 1;
     else {
+        // Busca livre
         for(int i = 2; i < MAX_WINDOWS; i++) {
             if (!windows[i].active) { id = i; break; }
         }
@@ -103,15 +106,16 @@ int wm_create(int type, char* title, int x, int y, int w, int h, uint8_t color) 
 
     if (id != -1) {
         windows[id].active = 1;
-        windows[id].button_count = 0; // <--- ADICIONE ESTA LINHA OBRIGATORIAMENTE!
         windows[id].type = type;
-        windows[id].x = x; windows[id].y = y;
-        windows[id].w = w; windows[id].h = h;
-        windows[id].color = color;
+        windows[id].x = x; 
+        windows[id].y = y;
+        windows[id].w = w; 
+        windows[id].h = h;
+        windows[id].color = color; // Agora cabe o 0xFFC0C0C0
+        windows[id].button_count = 0;
         strcpy(windows[id].title, title);
         
-        // --- CORREÇÃO: Foco automático na criação ---
-        current_app_id = id; 
+        current_app_id = id;
     }
     return id;
 }
@@ -129,38 +133,37 @@ Window* wm_get(int id) {
 void wm_draw_one(Window* w) {
     if (!w || !w->active) return;
 
-    // 1. Desenha a moldura e o fundo da janela
+    // Chama a função gráfica nova (32-bit)
     gfx_draw_window(w->title, w->x, w->y, w->w, w->h, w->color);
 
-    // 2. DESENHA O CONTEÚDO (O que estava faltando!)
+    // Conteúdo
     if (w->type == TYPE_SHELL) {
-        // Passamos a janela para o shell saber onde desenhar o texto
         shell_draw(w); 
     } 
     else if (w->type == TYPE_TEXT) {
-        // CORREÇÃO PARA MULTILINHAS:
+        // Texto Simples
         int cur_x = w->x + 8;
-        int cur_y = w->y + 20;
+        int cur_y = w->y + 25;
         char* ptr = w->buffer;
-        
         while (*ptr) {
             if (*ptr == '\n') {
-                cur_y += 10;     // Pula linha
-                cur_x = w->x + 8; // Volta para o X da JANELA, não da tela!
+                cur_y += 10;
+                cur_x = w->x + 8;
             } else {
-                gfx_draw_char(cur_x, cur_y, *ptr, 0); // Desenha caractere
+                gfx_draw_char(cur_x, cur_y, *ptr, 0xFF000000); // Texto Preto
                 cur_x += 8;
             }
             ptr++;
         }
     }
-    // 3. Desenha os botões por cima de tudo
+
+    // Botões
     for (int i = 0; i < w->button_count; i++) {
         Button* b = &w->buttons[i];
-        gfx_draw_button(b->label, w->x + b->x, w->y + b->y, b->w, b->h, 7);
+        // Botão Cinza Claro
+        gfx_draw_button(b->label, w->x + b->x, w->y + b->y, b->w, b->h, 0xFFE0E0E0);
     }
 }
-
 // --- Colisões (Idêntico ao anterior, mas iterando tudo) ---
 
 int wm_check_title_collision(int mx, int my) {

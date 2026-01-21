@@ -1,25 +1,29 @@
 #ifndef FS_H
 #define FS_H
+
 #include <stdint.h>
 
 #define MAX_FILES 10
 #define TABLE_SECTOR 1
 #define DATA_START_SECTOR 2
+#define SECTORS_PER_FILE 64 
 
-#define SECTORS_PER_FILE 64
-
+// CORREÇÃO CRÍTICA: Agora idêntico ao tools/packer.c
+// Total: 32 + 4 + 4 + 4 = 44 bytes
 typedef struct __attribute__((packed)) {
-    char name[16];
-    uint32_t sector;
-    uint8_t used;
-    uint32_t size;
+    char name[32];      // Aumentado para 32 bytes
+    uint32_t size;      // Movido para cá
+    uint32_t sector;    // Movido para cá
+    uint32_t used;      // Mudado para uint32_t
 } FileEntry;
 
+// Funções do File System
 void fs_format();
 void fs_list();
-int fs_create(char* name, char* content);
-int fs_delete(char* name);
-int fs_read_to_buffer(char* name, char* buffer); // <--- Atualizado
-int fs_exists(char* name);
 void fs_get_list_str(char* buffer);
+int fs_create(char* name, char* content);
+int fs_read_to_buffer(char* name, char* buffer);
+int fs_delete(char* name);
+int fs_exists(char* name);
+
 #endif

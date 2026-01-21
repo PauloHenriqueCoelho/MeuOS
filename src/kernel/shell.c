@@ -1,5 +1,5 @@
 #include "../include/shell.h"
-#include "../include/vga.h"
+#include "../include/vga.h" // Agora usa as definições 32-bit
 #include "../include/io.h"
 #include "../include/utils.h"
 #include "../include/window.h" 
@@ -7,6 +7,12 @@
 #include "../include/script.h"
 #include "../include/mouse.h"
 #include "../include/fs.h"
+
+// Cores 32-bit
+#define COLOR_WHITE 0xFFFFFFFF
+#define COLOR_GREEN 0xFF00FF00
+#define COLOR_BLUE  0xFF0000FF
+#define COLOR_BLACK 0xFF000000
 
 // Buffer interno do Shell
 char shell_buffer[256];
@@ -17,19 +23,21 @@ void shell_init() {
     shell_cursor_pos = 0;
 }
 
-// Esta é a função que o Linker não estava encontrando
+// Função de desenho atualizada para VBE 32-bit
 void shell_draw(Window* w) {
     if (!w) return;
 
-    // Definimos onde o texto começa dentro da janela (margens)
+    // Margens
     int start_x = w->x + 8;
-    int start_y = w->y + 20;
+    int start_y = w->y + 25; // Ajustei um pouco a altura para caber na barra de título nova
 
-    // Desenha o Prompt
-    vga_print_at(start_x, start_y, "> ", 10); // 10 = Verde para o prompt
+    // 1. Posiciona e desenha o Prompt (Verde)
+    vga_set_cursor(start_x, start_y);
+    vga_print_color("> ", COLOR_GREEN); 
 
-    // Desenha o que o usuário está digitando (o buffer do shell)
-    vga_print_at(start_x + 16, start_y, shell_buffer, 15); // 15 = Branco
+    // 2. Posiciona e desenha o texto digitado (Branco)
+    vga_set_cursor(start_x + 16, start_y);
+    vga_print_color(shell_buffer, COLOR_WHITE);
 }
 
 void shell_handle_key(char c) {
@@ -51,7 +59,6 @@ void shell_handle_key(char c) {
             shell_buffer[shell_cursor_pos] = c;
             shell_cursor_pos++;
             shell_buffer[shell_cursor_pos] = 0; 
-            
         }
     } 
 }
@@ -69,6 +76,7 @@ void shell_execute(char* command) {
     }
     // LIMPAR
     else if (strcmp(command, "limpar") == 0) {
+        // Em modo gráfico, limpar é apenas zerar o buffer visualmente no próximo frame
     }
     // MKFILE
     else if (strncmp(command, "mkfile ", 7) == 0) {
@@ -105,14 +113,15 @@ void shell_execute(char* command) {
         os_reboot();
     }
     else if (strncmp(command, "exec ", 5) == 0) {
-    char* filename = get_argument(command);
-    os_execute_bin(filename);
-}
-    // LS
+        char* filename = get_argument(command);
+        os_execute_bin(filename);
+    }
+    // LS (Janela de arquivos - Azul)
     else if (strcmp(command, "ls") == 0) {
         char list_buffer[512];
         fs_get_list_str(list_buffer);
-        int id = wm_create(TYPE_TEXT, "Arquivos", 50, 50, 180, 120, 1);
+        // Atualizado para cor COLOR_BLUE (Azul)
+        int id = wm_create(TYPE_TEXT, "Arquivos", 50, 50, 180, 120, COLOR_BLUE);
         if (id != -1) {
             Window* w = wm_get(id);
             strcpy(w->buffer, list_buffer);
@@ -129,12 +138,13 @@ void shell_execute(char* command) {
         char* filename = get_argument(command);
         if (*filename) os_file_delete(filename);
     }
-    // CAT
+    // CAT (Leitura - Branco)
     else if (strncmp(command, "cat ", 4) == 0) {
         char* filename = get_argument(command);
         char content[1024];
         if (os_file_read(filename, content)) {
-            int id = wm_create(TYPE_TEXT, filename, 70, 70, 250, 150, 15);
+            // Atualizado para cor COLOR_WHITE (Branco)
+            int id = wm_create(TYPE_TEXT, filename, 70, 70, 250, 150, COLOR_WHITE);
             if (id != -1) {
                 Window* w = wm_get(id);
                 strcpy(w->buffer, content);

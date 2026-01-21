@@ -4,54 +4,54 @@
 #include <stdint.h>
 
 #define MAX_WINDOWS 10
-#define WIN_ID_SHELL 0  // <--- FALTAVA ISSO
-#define WIN_ID_CALC  1
+#define WIN_ID_NONE -1
 
 // Tipos de Janela
-#define TYPE_SHELL 1
-#define TYPE_CALC  3
-#define TYPE_TEXT  2 // Janelas genéricas (msgbox, cat, help)
-
-// IDs Fixos (Opcionais, mas úteis para apps do sistema)
-#define WIN_ID_NONE  -1
-
-extern int current_app_id;
+#define TYPE_SHELL 0
+#define TYPE_CALC  1
+#define TYPE_TEXT  2
 
 typedef struct {
+    int id;
     int x, y, w, h;
     char label[16];
-    int id; // ID que será retornado ao programa quando clicado
 } Button;
 
 typedef struct {
     int id;
+    int type;
+    int active;
     char title[32];
     int x, y, w, h;
-    uint8_t color;
-    int active;       // <-- Este é o nome que vamos usar!
-    int type;
-    char buffer[1024];
+    uint32_t color;  // <--- MUDOU DE uint8_t PARA uint32_t
+    
     Button buttons[10];
     int button_count;
+    
+    // Buffer para janelas de texto
+    char buffer[256];
 } Window;
 
+// IDs Fixos das Aplicações Principais
+#define WIN_ID_SHELL 0  // <--- ADICIONADO: O Shell sempre ocupa o slot 0
+#define WIN_ID_CALC  1
+
 void wm_init();
-void refresh_screen();
-// Cria uma nova janela genérica e retorna o ID dela
-int wm_create(int type, char* title, int x, int y, int w, int h, uint8_t color);
+int wm_create(int type, char* title, int x, int y, int w, int h, uint32_t color); // <--- uint32_t AQUI
 void wm_close(int id);
 Window* wm_get(int id);
+void wm_draw_one(Window* w);
 void wm_focus(int id);
 void wm_update_button(int win_id, int btn_id, char* new_text);
-
-// Função Mestra de Desenho (O WM decide como desenhar cada tipo)
+void refresh_screen(); // O compilador reclamava disso
+void desktop_draw();   // Necessário para o refresh_screen desenhar o fundo
 
 // Colisões
 int wm_check_title_collision(int mx, int my);
 int wm_check_close_collision(int mx, int my);
 int wm_check_body_collision(int mx, int my);
-Window* wm_get(int id);
-void wm_draw_one(Window* w);
-int wm_wait_click(int win_id); // <-- ADICIONE ESTA LINHA
+int wm_wait_click(int win_id);
+
+extern int current_app_id;
 
 #endif

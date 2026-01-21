@@ -1,70 +1,102 @@
 // apps/calc.c
-// Compilar como binário "flat"
+// Calculadora Completa (0-9, +, -, *, /, =, C)
 
-// --- 1. Protótipos (Para o main saber que essas funções existem) ---
+// --- 1. Protótipos ---
 void sys_exit();
-void sys_print(char* s);
 int sys_create_window(char* title, int x, int y, int w, int h);
 void sys_create_button(int win, int id, char* text, int x, int y, int w, int h);
 int sys_wait_event(int win);
 void sys_update_button(int win, int id, char* text);
 void itoa(int n, char* buffer);
 
-// --- 2. Entry Point (O main DEVE ser a primeira função aqui!) ---
+// --- 2. Entry Point ---
 void main() {
-    int win = sys_create_window("Calculadora", 100, 100, 160, 200);
+    // Aumentei um pouco a altura para caber tudo (160x220)
+    int win = sys_create_window("Calc", 100, 100, 160, 220);
     
-    // Visor (ID 999)
+    // Visor (ID 999) - Topo
     sys_create_button(win, 999, "0", 10, 10, 140, 30); 
 
-    // Botões
-    sys_create_button(win, 1, "1", 10, 50, 40, 40);
-    sys_create_button(win, 2, "2", 60, 50, 40, 40);
-    sys_create_button(win, 3, "+", 110, 50, 40, 40);
-    sys_create_button(win, 4, "=", 110, 100, 40, 40);
+    // --- LINHA 1 (7, 8, 9, /) ---
+    sys_create_button(win, 7, "7", 10, 50, 30, 30);
+    sys_create_button(win, 8, "8", 45, 50, 30, 30);
+    sys_create_button(win, 9, "9", 80, 50, 30, 30);
+    sys_create_button(win, 23, "/", 115, 50, 30, 30); // ID 23 = Divisão
 
-    int acumulador = 0;
-    int operacao = 0; 
+    // --- LINHA 2 (4, 5, 6, *) ---
+    sys_create_button(win, 4, "4", 10, 85, 30, 30);
+    sys_create_button(win, 5, "5", 45, 85, 30, 30);
+    sys_create_button(win, 6, "6", 80, 85, 30, 30);
+    sys_create_button(win, 22, "*", 115, 85, 30, 30); // ID 22 = Multiplicação
+
+    // --- LINHA 3 (1, 2, 3, -) ---
+    sys_create_button(win, 1, "1", 10, 120, 30, 30);
+    sys_create_button(win, 2, "2", 45, 120, 30, 30);
+    sys_create_button(win, 3, "3", 80, 120, 30, 30);
+    sys_create_button(win, 21, "-", 115, 120, 30, 30); // ID 21 = Subtração
+
+    // --- LINHA 4 (C, 0, =, +) ---
+    sys_create_button(win, 30, "C", 10, 155, 30, 30); // ID 30 = Clear
+    sys_create_button(win, 0, "0", 45, 155, 30, 30);
+    sys_create_button(win, 40, "=", 80, 155, 30, 30); // ID 40 = Igual
+    sys_create_button(win, 20, "+", 115, 155, 30, 30); // ID 20 = Soma
+
+    int acumulador = 0;   // Valor atual na tela
+    int valor_salvo = 0;  // Valor guardado antes da operação
+    int operacao = 0;     // 0=Nada, 1=+, 2=-, 3=*, 4=/
     char buf[32];
 
     while(1) {
         int id = sys_wait_event(win);
 
-        if (id == 1) { 
-            acumulador = acumulador * 10 + 1;
+        // --- NÚMEROS (0 a 9) ---
+        if (id >= 0 && id <= 9) {
+            acumulador = acumulador * 10 + id;
             itoa(acumulador, buf);
             sys_update_button(win, 999, buf);
         }
-        else if (id == 2) { 
-            acumulador = acumulador * 10 + 2;
-            itoa(acumulador, buf);
-            sys_update_button(win, 999, buf);
-        }
-        else if (id == 3) { 
-            operacao = 1; 
+        
+        // --- OPERAÇÕES ---
+        else if (id >= 20 && id <= 23) {
+            valor_salvo = acumulador;
             acumulador = 0;
-            sys_update_button(win, 999, "+");
+            
+            if (id == 20) { operacao = 1; sys_update_button(win, 999, "+"); }
+            if (id == 21) { operacao = 2; sys_update_button(win, 999, "-"); }
+            if (id == 22) { operacao = 3; sys_update_button(win, 999, "*"); }
+            if (id == 23) { operacao = 4; sys_update_button(win, 999, "/"); }
         }
-        else if (id == 4) { 
-            if (operacao == 1) {
-                acumulador = acumulador + 2; 
-                itoa(acumulador, buf);
-                sys_update_button(win, 999, buf);
-                operacao = 0; 
+
+        // --- IGUAL (=) ---
+        else if (id == 40) {
+            if (operacao == 1) acumulador = valor_salvo + acumulador;
+            if (operacao == 2) acumulador = valor_salvo - acumulador;
+            if (operacao == 3) acumulador = valor_salvo * acumulador;
+            if (operacao == 4) {
+                if (acumulador != 0) acumulador = valor_salvo / acumulador;
+                else acumulador = 0; // Proteção contra divisão por zero
             }
+            
+            itoa(acumulador, buf);
+            sys_update_button(win, 999, buf);
+            operacao = 0; // Reseta operação
+        }
+
+        // --- CLEAR (C) ---
+        else if (id == 30) {
+            acumulador = 0;
+            valor_salvo = 0;
+            operacao = 0;
+            sys_update_button(win, 999, "0");
         }
     }
     sys_exit();
 }
 
-// --- 3. Implementação das Syscalls (Ficam embaixo) ---
+// --- 3. Implementação das Syscalls (Assembly Manual Seguro) ---
 
 void sys_exit() { 
     __asm__ volatile("int $0x80" :: "a"(0)); 
-}
-
-void sys_print(char* s) { 
-    __asm__ volatile("int $0x80" :: "a"(1), "b"(s)); 
 }
 
 int sys_create_window(char* title, int x, int y, int w, int h) {
@@ -84,7 +116,6 @@ int sys_create_window(char* title, int x, int y, int w, int h) {
 void sys_create_button(int win, int id, char* text, int x, int y, int w, int h) {
     int pos = (x << 16) | (y & 0xFFFF);
     
-    // Passagem manual via stack para evitar "impossible constraints"
     __asm__ volatile(
         "pushl %%ebp; "
         "pushl %%edi; "
@@ -133,8 +164,13 @@ void sys_update_button(int win, int id, char* text) {
 
 void itoa(int n, char* buffer) {
     int i = 0; 
+    int sign = 0;
     if (n == 0) { buffer[0] = '0'; buffer[1] = 0; return; }
+    if (n < 0) { sign = 1; n = -n; } // Suporte a números negativos
+
     while (n > 0) { buffer[i++] = (n % 10) + '0'; n /= 10; }
+    if (sign) buffer[i++] = '-';
+    
     buffer[i] = 0;
     for(int j=0; j<i/2; j++) { char t=buffer[j]; buffer[j]=buffer[i-1-j]; buffer[i-1-j]=t; }
 }
