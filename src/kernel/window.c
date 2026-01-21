@@ -104,11 +104,10 @@ void wm_draw_one(int id) {
 // --- Colisões (Idêntico ao anterior, mas iterando tudo) ---
 
 int wm_check_title_collision(int mx, int my) {
-    for(int i = MAX_WINDOWS - 1; i >= 0; i--) { // Começa do último índice
+    for(int i = MAX_WINDOWS - 1; i >= 0; i--) {
         if (!windows[i].active) continue;
-        
         Window* w = &windows[i];
-        // Se a janela clicada for a do topo (current_app_id), ela tem prioridade total
+        // Note o "- 15" para deixar espaço para o botão [X]
         if (mx >= w->x && mx <= (w->x + w->w - 15) &&
             my >= w->y && my <= (w->y + 12)) return i;
     }

@@ -11,6 +11,7 @@ void os_set_cursor(int x, int y);
 void os_msgbox(char* title, char* text);
 
 
+
 // --- ENTRADA ---
 char os_wait_for_key();
 
@@ -22,7 +23,9 @@ int os_file_delete(char* name);
 void os_file_list();
 
 // --- SISTEMA / GUI ---
+// --- SISTEMA / GUI ---
 void os_reboot();
+void os_execute_bin(char* filename); // <--- ADICIONE ESTA LINHA
 void os_create_window(char* title, int x, int y, int w, int h, uint8_t color);
 
 // Verifica se o clique ocorreu dentro da área do botão de fechar [X]

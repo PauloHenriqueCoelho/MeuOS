@@ -6,7 +6,7 @@
 #include "../include/api.h"
 #include "../include/script.h"
 #include "../include/mouse.h"
-#include "../include/fs.h" // <--- ADICIONE ESTE INCLUDE
+#include "../include/fs.h"
 
 // Buffer interno do Shell
 char shell_buffer[256];
@@ -17,6 +17,7 @@ void shell_init() {
     shell_cursor_pos = 0;
 }
 
+// Esta é a função que o Linker não estava encontrando
 void shell_draw() {
     Window* w = wm_get(WIN_ID_SHELL);
     if (!w) return;
@@ -112,7 +113,12 @@ void shell_execute(char* command) {
     else if (strcmp(command, "reboot") == 0) {
         os_reboot();
     }
-    // LS (Como Programa)
+    else if (strncmp(command, "exec ", 5) == 0) {
+    char* filename = get_argument(command);
+    os_msgbox("Ajuda", "ls: Listar\ntouch: Criar\ncat: Ler\nrm: Apagar\nreboot: Reiniciar");
+    os_execute_bin(filename);
+}
+    // LS
     else if (strcmp(command, "ls") == 0) {
         char list_buffer[512];
         fs_get_list_str(list_buffer);
@@ -133,7 +139,7 @@ void shell_execute(char* command) {
         char* filename = get_argument(command);
         if (*filename) os_file_delete(filename);
     }
-    // CAT (Como Programa)
+    // CAT
     else if (strncmp(command, "cat ", 4) == 0) {
         char* filename = get_argument(command);
         char content[1024];

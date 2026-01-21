@@ -11,6 +11,7 @@ extern void idt_flush(uint32_t);
 extern void isr0();  // Timer (IRQ 0)
 extern void isr1();  // Teclado
 extern void isr12(); // Mouse (NOVO)
+extern void isr128();
 
 static void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
     idt_entries[num].base_lo = base & 0xFFFF;
@@ -52,6 +53,7 @@ void init_pic() {
 void init_idt() {
     idt_ptr.limit = sizeof(idt_entry_t) * 256 - 1;
     idt_ptr.base  = (uint32_t)&idt_entries;
+    idt_set_gate(128, (uint32_t)isr128, 0x08, 0xEE);
 
     // Limpa IDT
     for (int i=0; i<256; i++) {

@@ -76,44 +76,46 @@ void kernel_main() {
             }
         }
         // --- CLIQUES ---
+        // --- CLIQUES ---
         else if (click) {
-            // 1. Primeiro checamos se clicou em qualquer lugar de QUALQUER janela
             int title_hit = wm_check_title_collision(mx, my);
             int body_hit = wm_check_body_collision(mx, my);
             int close_hit = wm_check_close_collision(mx, my);
 
-            // Se o clique acertou qualquer parte de uma janela (Botão, Título ou Corpo)
             if (close_hit != WIN_ID_NONE || title_hit != WIN_ID_NONE || body_hit != WIN_ID_NONE) {
                 
-                // Prioridade 1: Botão fechar
+                // Prioridade 1: Botão fechar (Clique Único - Mantém o while)
                 if (close_hit != WIN_ID_NONE) {
                     wm_close(close_hit);
                     if (current_app_id == close_hit) current_app_id = WIN_ID_NONE;
                     redraw_needed = 1;
+                    while(mouse_get_status() & 1); // Debounce para não fechar várias coisas
                 } 
-                // Prioridade 2: Arrastar pela barra de título
+                // Prioridade 2: Arrastar pela barra de título (NÃO pode ter while aqui)
                 else if (title_hit != WIN_ID_NONE) {
-                    current_app_id = title_hit; // Traz para frente
+                    wm_focus(title_hit); 
                     dragging_window_id = title_hit;
                     Window* w = wm_get(title_hit);
                     drag_offset_x = mx - w->x;
                     drag_offset_y = my - w->y;
                     redraw_needed = 1;
+                    // Note que removi o while aqui para permitir o movimento contínuo
                 }
-                // Prioridade 3: Clicou no corpo (Apenas focar ou interagir)
+                // Prioridade 3: Clicou no corpo
                 else if (body_hit != WIN_ID_NONE) {
-                    current_app_id = body_hit; // Traz para frente
-                    redraw_needed = 1;
+                    if (current_app_id != body_hit) {
+                        wm_focus(body_hit);
+                        redraw_needed = 1;
+                    }
                     
-                    // Se for calculadora, envia o clique
                     Window* w = wm_get(body_hit);
                     if (w->type == TYPE_CALC) {
                         calculator_click(mx, my);
+                        while(mouse_get_status() & 1); // Botão da calc é clique único
                     }
                 }
-                while(mouse_get_status() & 1); // Debounce
             } 
-            // 2. SÓ CHECA ÍCONES se o clique caiu no "papel de parede" (não acertou janelas)
+            // 2. Ícones do Desktop (Clique Único - Mantém o while)
             else {
                 if (mx >= 20 && mx <= 52) {
                     if (my >= 20 && my <= 52) { // Shell
@@ -124,8 +126,8 @@ void kernel_main() {
                         wm_create(TYPE_CALC, "Calc", 100, 50, 120, 150, 7);
                         redraw_needed = 1;
                     }
+                    while(mouse_get_status() & 1); // Debounce para ícones
                 }
-                while(mouse_get_status() & 1);
             }
         }
         // Teclado só vai para o Shell se ele estiver focado

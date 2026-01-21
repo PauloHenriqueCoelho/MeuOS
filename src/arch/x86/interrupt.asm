@@ -5,6 +5,8 @@ global isr12
 extern mouse_handler_isr
 global isr0   ; IRQ 0 = Timer
 extern timer_callback
+global isr128
+extern syscall_handler
 
 
 ; Carrega a tabela IDT
@@ -26,7 +28,7 @@ isr0:
     popa
     sti
     iret
-    
+
 ; --- HANDLER DO TECLADO (IRQ 1) ---
 isr1:
     cli                 ; 1. Desliga interrupções para não encavalar
@@ -57,4 +59,17 @@ isr12:
     popa                ; Restaura registradores
     sti
     iret
+
+isr128:
+    cli             ; Desativa interrupções
+    pusha           ; Salva EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
+    
+    ; Empurra os registadores como um argumento para a função C
+    push esp        
+    call syscall_handler
+    add esp, 4      ; Limpa o argumento da stack
+    
+    popa            ; Restaura os registadores
+    sti             ; Reativa interrupções
+    iret            ; Volta para o programa de utilizador
 
