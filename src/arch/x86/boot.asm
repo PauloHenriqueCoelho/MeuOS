@@ -10,8 +10,8 @@ CHECKSUM    equ -(MAGIC + FLAGS)
 
 ; --- Configuração da Resolução (800x600x32) ---
 MODE_TYPE   equ 0   ; 0 = Linear Graphics
-WIDTH       equ 800
-HEIGHT      equ 600
+WIDTH       equ 1024 ; <--- MUDOU DE 800
+HEIGHT      equ 768  ; <--- MUDOU DE 600
 DEPTH       equ 32  ; 32 bits (RGBA)
 
 section .multiboot
