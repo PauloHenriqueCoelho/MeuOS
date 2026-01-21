@@ -1,4 +1,6 @@
 #include "../include/io.h"
+#include "../include/utils.h" // Para os_print (se existir, ou declaramos extern)
+#include "../include/api.h"   // Para os_print
 #include <stdint.h>
 
 #define ATA_DATA        0x1F0
@@ -11,52 +13,62 @@
 #define ATA_STATUS      0x1F7
 #define ATA_COMMAND     0x1F7
 
-// Comandos ATA
 #define CMD_READ_PIO    0x20
 #define CMD_WRITE_PIO   0x30
 
-// Status bits
-#define STATUS_BSY      0x80  // Busy (Ocupado)
-#define STATUS_DRQ      0x08  // Data Request (Pronto para transferir)
-#define STATUS_ERR      0x01  // Erro
+#define STATUS_BSY      0x80
+#define STATUS_DRQ      0x08
+#define STATUS_ERR      0x01
 
-// Espera o HD ficar pronto (sem usar interrupções)
+// Timeout para não travar o OS (aprox)
+#define ATA_TIMEOUT     1000000 
+
 void ata_wait_bsy() {
-    while(inb(ATA_STATUS) & STATUS_BSY);
+    int timeout = ATA_TIMEOUT;
+    while(inb(ATA_STATUS) & STATUS_BSY) {
+        timeout--;
+        if (timeout == 0) {
+            os_print("[ATA] Timeout BSY!\n");
+            break;
+        }
+    }
 }
 
 void ata_wait_drq() {
-    while(!(inb(ATA_STATUS) & STATUS_DRQ));
+    int timeout = ATA_TIMEOUT;
+    while(!(inb(ATA_STATUS) & STATUS_DRQ)) {
+        timeout--;
+        if (timeout == 0) {
+            os_print("[ATA] Timeout DRQ!\n");
+            break;
+        }
+    }
 }
 
-// Lê um setor (512 bytes) do disco
-// LBA: Endereço do bloco (0, 1, 2...)
-// buffer: Onde salvar os dados na memória (deve ter 512 bytes)
 void ata_read_sector(uint32_t lba, uint8_t* buffer) {
+    // os_print("[ATA] Lendo LBA: "); 
+    // char tmp_c = '0' + (lba % 10); char tmp_s[2] = {tmp_c, 0}; os_print(tmp_s);
+    // os_print("\n");
+
     ata_wait_bsy();
 
-    // Seleciona o Drive Master (0xE0) e os bits altos do LBA
     outb(ATA_DRIVE_HEAD, 0xE0 | ((lba >> 24) & 0x0F));
-    
-    // Envia NULL byte para portas altas (legado)
     outb(ATA_ERROR, 0x00);
-    
-    // Quantos setores ler? (1)
     outb(ATA_SECTOR_CNT, 1);
-    
-    // Envia o endereço LBA (Low, Mid, High)
     outb(ATA_LBA_LO, (uint8_t) lba);
     outb(ATA_LBA_MID, (uint8_t)(lba >> 8));
     outb(ATA_LBA_HI, (uint8_t)(lba >> 16));
-    
-    // Envia comando "READ"
     outb(ATA_COMMAND, CMD_READ_PIO);
 
-    // Espera o disco processar
     ata_wait_bsy();
     ata_wait_drq();
 
-    // Lê os dados! (256 words = 512 bytes)
+    // Verifica erro
+    if (inb(ATA_STATUS) & STATUS_ERR) {
+        os_print("[ATA] Erro de Leitura!\n");
+        return;
+    }
+
     for (int i = 0; i < 256; i++) {
         uint16_t tmp = inw(ATA_DATA);
         buffer[i * 2] = (uint8_t) tmp;
@@ -64,7 +76,6 @@ void ata_read_sector(uint32_t lba, uint8_t* buffer) {
     }
 }
 
-// Escreve um setor (512 bytes) no disco
 void ata_write_sector(uint32_t lba, uint8_t* data) {
     ata_wait_bsy();
 
@@ -74,20 +85,16 @@ void ata_write_sector(uint32_t lba, uint8_t* data) {
     outb(ATA_LBA_LO, (uint8_t) lba);
     outb(ATA_LBA_MID, (uint8_t)(lba >> 8));
     outb(ATA_LBA_HI, (uint8_t)(lba >> 16));
-    
-    // Envia comando "WRITE"
     outb(ATA_COMMAND, CMD_WRITE_PIO);
 
     ata_wait_bsy();
     ata_wait_drq();
 
-    // Escreve os dados
     for (int i = 0; i < 256; i++) {
         uint16_t tmp = data[i * 2] | (data[i * 2 + 1] << 8);
         outw(ATA_DATA, tmp);
     }
     
-    // Comando de Flush (garantir que gravou)
-    outb(ATA_COMMAND, 0xE7); // Cache Flush
+    outb(ATA_COMMAND, 0xE7); // Flush
     ata_wait_bsy();
 }

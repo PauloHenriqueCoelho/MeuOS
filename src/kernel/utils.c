@@ -76,3 +76,11 @@ void strcat(char* dest, const char* src) {
     // 3. Adiciona o novo terminador nulo no final de tudo
     *d = '\0';
 }
+
+void* memset(void* ptr, int value, int num) {
+    unsigned char* p = (unsigned char*)ptr;
+    for (int i = 0; i < num; i++) {
+        p[i] = (unsigned char)value;
+    }
+    return ptr;
+}

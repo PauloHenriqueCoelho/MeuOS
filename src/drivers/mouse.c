@@ -2,159 +2,121 @@
 #include "../include/io.h"
 #include "../include/utils.h"
 #include "../include/vga.h"
-#include "../include/idt.h" // Para interrupções
+#include "../include/idt.h"
 
-// Constantes de Cor 32-bit
-#define COLOR_MOUSE_BORDER 0xFF000000 // Preto
-#define COLOR_MOUSE_FILL   0xFFFFFFFF // Branco
+#define CURSOR_W 12
+#define CURSOR_H 19
+
+static uint32_t backbuffer[CURSOR_W * CURSOR_H];
+static int saved_x = 0;
+static int saved_y = 0;
+static int has_saved = 0;
 
 uint8_t mouse_cycle = 0;
 int8_t mouse_byte[3];
-int mouse_x = 400; // Começa no meio (800/2)
-int mouse_y = 300; // Começa no meio (600/2)
+int mouse_x = 512; 
+int mouse_y = 384; 
 int mouse_status = 0;
 
-// Cursor padrão (Bitmap simples 12x19)
-// 1 = Borda (Preto), 2 = Preenchimento (Branco), 0 = Transparente
 static int mouse_cursor[19][12] = {
-    {1,1,0,0,0,0,0,0,0,0,0,0},
-    {1,2,1,0,0,0,0,0,0,0,0,0},
-    {1,2,2,1,0,0,0,0,0,0,0,0},
-    {1,2,2,2,1,0,0,0,0,0,0,0},
-    {1,2,2,2,2,1,0,0,0,0,0,0},
-    {1,2,2,2,2,2,1,0,0,0,0,0},
-    {1,2,2,2,2,2,2,1,0,0,0,0},
-    {1,2,2,2,2,2,2,2,1,0,0,0},
-    {1,2,2,2,2,2,2,2,2,1,0,0},
-    {1,2,2,2,2,2,1,1,1,1,0,0},
-    {1,2,2,2,1,2,1,0,0,0,0,0},
-    {1,2,1,1,0,1,2,1,0,0,0,0},
-    {1,1,0,0,0,1,2,1,0,0,0,0},
-    {0,0,0,0,0,0,1,2,1,0,0,0},
-    {0,0,0,0,0,0,1,2,1,0,0,0},
-    {0,0,0,0,0,0,0,1,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,0,0,0},
+    {1,1,0,0,0,0,0,0,0,0,0,0}, {1,2,1,0,0,0,0,0,0,0,0,0}, {1,2,2,1,0,0,0,0,0,0,0,0},
+    {1,2,2,2,1,0,0,0,0,0,0,0}, {1,2,2,2,2,1,0,0,0,0,0,0}, {1,2,2,2,2,2,1,0,0,0,0,0},
+    {1,2,2,2,2,2,2,1,0,0,0,0}, {1,2,2,2,2,2,2,2,1,0,0,0}, {1,2,2,2,2,2,2,2,2,1,0,0},
+    {1,2,2,2,2,2,1,1,1,1,0,0}, {1,2,2,2,1,2,1,0,0,0,0,0}, {1,2,1,1,0,1,2,1,0,0,0,0},
+    {1,1,0,0,0,1,2,1,0,0,0,0}, {0,0,0,0,0,0,1,2,1,0,0,0}, {0,0,0,0,0,0,1,2,1,0,0,0},
+    {0,0,0,0,0,0,0,1,0,0,0,0}, {0,0,0,0,0,0,0,0,0,0,0,0}, {0,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,0,0}
 };
 
-void mouse_wait(uint8_t type) {
-    uint32_t timeout = 100000;
-    if (type == 0) {
-        while (timeout--) {
-            if ((inb(0x64) & 1) == 1) return;
+void mouse_draw() {
+    if (has_saved) {
+        for(int y=0; y < CURSOR_H; y++) {
+            for(int x=0; x < CURSOR_W; x++) {
+                gfx_put_pixel(saved_x+x, saved_y+y, backbuffer[y * CURSOR_W + x]);
+            }
         }
-        return;
-    } else {
-        while (timeout--) {
-            if ((inb(0x64) & 2) == 0) return;
+    }
+    saved_x = mouse_x;
+    saved_y = mouse_y;
+    for(int y=0; y < CURSOR_H; y++) {
+        for(int x=0; x < CURSOR_W; x++) {
+            backbuffer[y * CURSOR_W + x] = gfx_get_pixel(mouse_x+x, mouse_y+y);
         }
-        return;
+    }
+    has_saved = 1;
+    for(int y=0; y < CURSOR_H; y++) {
+        for(int x=0; x < CURSOR_W; x++) {
+            int p = mouse_cursor[y][x];
+            if (p==1) gfx_put_pixel(mouse_x+x, mouse_y+y, 0xFF000000); 
+            if (p==2) gfx_put_pixel(mouse_x+x, mouse_y+y, 0xFFFFFFFF); 
+        }
     }
 }
 
-void mouse_write(uint8_t write) {
-    mouse_wait(1);
-    outb(0x64, 0xD4);
-    mouse_wait(1);
-    outb(0x60, write);
+// --- FUNÇÃO DE COMPATIBILIDADE ---
+// Mantida vazia para satisfazer o linker (window.c chama ela)
+void mouse_reset_background() {
+    // Não precisa fazer nada, mouse_draw() já gerencia o fundo
 }
+// ---------------------------------
 
-uint8_t mouse_read() {
-    mouse_wait(0);
-    return inb(0x60);
-}
-
-void mouse_handler_isr() {
+void mouse_handler_isr(registers_t* r) {
+    (void)r;
     uint8_t status = inb(0x64);
-    if (!(status & 1)) return; // Buffer vazio
-
-    uint8_t mouse_in = inb(0x60);
+    if (!(status & 1)) return;
+    uint8_t val = inb(0x60);
     
-    // Sincronização básica
-    if (mouse_cycle == 0 && !(mouse_in & 0x08)) return;
-
-    mouse_byte[mouse_cycle++] = mouse_in;
+    if (mouse_cycle == 0 && !(val & 0x08)) return;
+    mouse_byte[mouse_cycle++] = val;
 
     if (mouse_cycle >= 3) {
         mouse_cycle = 0;
-        
-        // Byte 0: Flags (Botões, overflow, sinais)
-        // Byte 1: Delta X
-        // Byte 2: Delta Y
-        
         int dx = mouse_byte[1];
         int dy = mouse_byte[2];
-
-        // Ajuste de sinal (9-bit)
-        if (mouse_byte[0] & 0x10) dx |= 0xFFFFFF00; 
+        if (mouse_byte[0] & 0x10) dx |= 0xFFFFFF00;
         if (mouse_byte[0] & 0x20) dy |= 0xFFFFFF00;
-
         mouse_x += dx;
-        mouse_y -= dy; // Y é invertido no hardware PS/2
-
-        // Proteção de bordas (800x600)
+        mouse_y -= dy;
+        int w = get_screen_width();
+        int h = get_screen_height();
+        if (w==0) w=1024; if (h==0) h=768;
         if (mouse_x < 0) mouse_x = 0;
-        if (mouse_x >= get_screen_width() - 1) mouse_x = get_screen_width() - 1;
+        if (mouse_x >= w-1) mouse_x = w-1;
         if (mouse_y < 0) mouse_y = 0;
-        if (mouse_y >= get_screen_height() - 1) mouse_y = get_screen_height() - 1;
-
+        if (mouse_y >= h-1) mouse_y = h-1;
         mouse_status = mouse_byte[0];
     }
 }
 
+void mouse_wait(uint8_t type) {
+    uint32_t t = 100000;
+    while(t--) { if((inb(0x64) & (type?2:1)) == (type?0:1)) return; }
+}
+
+void mouse_write(uint8_t write) {
+    mouse_wait(1); outb(0x64, 0xD4);
+    mouse_wait(1); outb(0x60, write);
+}
+
+uint8_t mouse_read() {
+    mouse_wait(0); return inb(0x60);
+}
+
 void mouse_init() {
-    uint8_t status;
-
-    // Habilita dispositivo auxiliar (mouse)
-    mouse_wait(1);
-    outb(0x64, 0xA8);
-
-    // Habilita interrupções
-    mouse_wait(1);
-    outb(0x64, 0x20);
-    mouse_wait(0);
-    status = (inb(0x60) | 2);
-    mouse_wait(1);
-    outb(0x64, 0x60);
-    mouse_wait(1);
-    outb(0x60, status);
-
-    // Usa configurações padrão
-    mouse_write(0xF6);
-    mouse_read();
-
-    // Habilita envio de pacotes
-    mouse_write(0xF4);
-    mouse_read();
+    register_interrupt_handler(44, mouse_handler_isr);
+    mouse_wait(1); outb(0x64, 0xA8);
+    mouse_wait(1); outb(0x64, 0x20);
+    mouse_wait(0); uint8_t s = (inb(0x60) | 2);
+    mouse_wait(1); outb(0x64, 0x60);
+    mouse_wait(1); outb(0x60, s);
+    mouse_write(0xF6); mouse_read();
+    mouse_write(0xF4); mouse_read();
 }
 
-// --- DESENHO DO MOUSE (Corrigido para 32-bit) ---
 void draw_mouse_cursor() {
-    // Desenha o bitmap definido acima
-    for(int y = 0; y < 19; y++) {
-        for(int x = 0; x < 12; x++) {
-            int pixel = mouse_cursor[y][x];
-            
-            if (pixel == 1) {
-                // Borda Preta (0xFF000000)
-                gfx_put_pixel(mouse_x + x, mouse_y + y, COLOR_MOUSE_BORDER);
-            }
-            else if (pixel == 2) {
-                // Preenchimento Branco (0xFFFFFFFF)
-                gfx_put_pixel(mouse_x + x, mouse_y + y, COLOR_MOUSE_FILL);
-            }
-            // Pixel 0 é transparente, não desenha nada
-        }
-    }
+    mouse_draw();
 }
 
-// --- API ---
 int mouse_get_x() { return mouse_x; }
 int mouse_get_y() { return mouse_y; }
 int mouse_get_status() { return mouse_status; }
-
-// Reseta o fundo (se necessário para lógica de double buffer futura)
-void mouse_reset_background() {
-    // Por enquanto não fazemos nada complexo aqui para manter simples
-}

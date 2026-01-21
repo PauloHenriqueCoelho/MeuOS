@@ -3,19 +3,17 @@
 #include "../include/utils.h"
 #include "../include/vga.h"
 #include "../include/api.h"
+#include "../include/idt.h" // <--- OBRIGATÓRIO: Define 'registers_t'
 #include "../include/task.h" // Necessário para ver a função scheduler
+
 
 uint32_t tick = 0;
 
 // Callback chamado a cada "batida" do relógio (IRQ 0)
-void timer_callback() {
+void timer_callback(registers_t* regs) {
+    (void)regs;
     tick++;
-    
-    // Opcional: Mostra algo na tela para provar que está vivo (ex: a cada 100 ticks)
-    // if (tick % 100 == 0) {
-    //    os_print("Tick! ");
-    // }
-    outb(0x20, 0x20);
+    outb(0x20, 0x20); // EOI manual as vezes é necessário no timer se não for pelo handler comum
     scheduler();
 }
 
@@ -60,6 +58,13 @@ void scheduler() {
     }
 
     if (old != current_task) {
+        // Se estiver trocando para o App (geralmente PID 1), imprima algo
+        if (current_task == 1) {
+            // Imprime um caractere discreto para não poluir muito (ex: '!')
+            // Se aparecerem muitos '!', o scheduler está funcionando.
+            // os_print("!"); 
+        }
+        
         extern void switch_to_task(uint32_t* old_esp, uint32_t new_esp);
         switch_to_task(&tasks[old].esp, tasks[current_task].esp);
     }

@@ -14,64 +14,37 @@
 #include "../include/memory.h"
 #include "../include/paging.h"
 #include "../include/task.h"
-
-// --- DEBUG SERIAL (Para ver logs no terminal) ---
-#define PORT 0x3f8 
-void init_serial() {
-   outb(PORT + 1, 0x00);
-   outb(PORT + 3, 0x80);
-   outb(PORT + 0, 0x03);
-   outb(PORT + 1, 0x00);
-   outb(PORT + 3, 0x03);
-   outb(PORT + 2, 0xC7);
-   outb(PORT + 4, 0x0B);
-}
-
-void print_serial(char* str) {
-   while(*str) {
-       while ((inb(PORT + 5) & 0x20) == 0);
-       outb(PORT, *str++);
-   }
-}
-// ------------------------------------------------
+#include "../include/editor.h" // <--- ADICIONE ESTA LINHA
 
 int dragging_window_id = WIN_ID_NONE;
 int drag_offset_x = 0, drag_offset_y = 0;
 
-#define COLOR_GRAY 0xFFC0C0C0
-#define COLOR_BLACK 0xFF000000
-#define COLOR_WHITE 0xFFFFFFFF
-
 void draw_clock() {
+    // Relógio no canto inferior direito
+    gfx_fill_rect(964, 748, 50, 15, 0xFFC0C0C0); 
     uint32_t seconds = get_tick() / 100;
     int m = (seconds / 60) % 60; int s = seconds % 60;
     char time_str[16];
     time_str[0] = (m/10)+'0'; time_str[1]=(m%10)+'0'; time_str[2]=':';
     time_str[3] = (s/10)+'0'; time_str[4]=(s%10)+'0'; time_str[5]='\0';
     
-    gfx_fill_rect(740, 580, 50, 15, COLOR_GRAY); 
-    int x = 745;
+    int x = 969;
     for(int i=0; time_str[i]; i++) {
-        gfx_draw_char(x, 582, time_str[i], COLOR_BLACK);
+        gfx_draw_char(x, 750, time_str[i], 0xFF000000);
         x += 8;
     }
 }
 
 void kernel_main(unsigned long magic, unsigned long addr) {
-    init_serial();
-    print_serial("\n[KERNEL] Iniciando...\n");
-
     init_gdt(); 
     init_idt();
-    print_serial("[KERNEL] GDT/IDT OK\n");
 
-    // Inicializa Vídeo
+    uint32_t fb_addr = 0;
+    uint32_t fb_size = 0;
+
     if (magic == 0x2BADB002) {
-        print_serial("[KERNEL] Magic Multiboot OK\n");
         multiboot_info_t* mboot = (multiboot_info_t*)addr;
-        
         if (mboot->flags & (1 << 12)) {
-            print_serial("[KERNEL] VBE Video Flag OK! Configurando...\n");
             vga_init_from_multiboot(
                 mboot->framebuffer_addr,
                 mboot->framebuffer_width,
@@ -79,45 +52,78 @@ void kernel_main(unsigned long magic, unsigned long addr) {
                 mboot->framebuffer_pitch,
                 mboot->framebuffer_bpp
             );
-        } else {
-            print_serial("[ERRO] VBE Flag AUSENTE! QEMU nao entregou video.\n");
+            
+            // SALVA OS DADOS PARA O MAPEAMENTO
+            fb_addr = mboot->framebuffer_addr;
+            // Calcula tamanho total (Largura * Altura * BytesPorPixel)
+            fb_size = mboot->framebuffer_width * mboot->framebuffer_height * (mboot->framebuffer_bpp / 8);
         }
-    } else {
-        print_serial("[ERRO] Magic Multiboot INVALIDO!\n");
     }
 
     keyboard_init(); 
     mouse_init(); 
     wm_init(); 
+    task_init();
     init_timer(100);
     pmm_init(128 * 1024 * 1024);
-    
-    // Mantenha Paging desligado por enquanto
-    // paging_init();
-    // task_init();
+        paging_init();
+        if (fb_addr > 0 && fb_size > 0) {
+        // Adiciona uma margem de segurança
+        for (uint32_t i = 0; i < fb_size + 0x4000; i += 0x1000) {
+            paging_map_page(fb_addr + i, fb_addr + i, kernel_page_directory);
+        }
+    }
+
+    enablePaging();
+
 
     __asm__ volatile("sti");
-    print_serial("[KERNEL] Interrupcoes Ativadas. Limpando tela...\n");
 
-    gfx_clear_screen(0xFF303080); 
+    // Limpa a tela inicial
+    gfx_clear_screen(0xFF303080);
     refresh_screen();
     
-    print_serial("[KERNEL] Loop principal iniciado.\n");
+    // Inicia o mouse
+    draw_mouse_cursor();
 
-    int last_mx = 0, last_my = 0;
+    int last_mx = mouse_get_x();
+    int last_my = mouse_get_y();
+    
     while(1) {
         draw_clock();
+        
         int mx = mouse_get_x();
         int my = mouse_get_y();
         int click = (mouse_get_status() & 1);
         int redraw_needed = 0;
 
+        // --- CORREÇÃO DE PERFORMANCE ---
+        // Se o mouse moveu, NÃO redesenhe tudo. 
+        // Apenas atualize o mouse (que agora usa Save-Under).
         if (mx != last_mx || my != last_my) {
-            draw_mouse_cursor();
+            draw_mouse_cursor(); // <--- Rápido e sem rastro!
             last_mx = mx;
             last_my = my;
         }
 
+        Window* active_win = wm_get(current_app_id);
+    if (active_win) {
+        char c = keyboard_get_key();
+        if (c != 0) {
+            // Se a janela focada for o Shell, manda pra lá
+            if (active_win->type == TYPE_SHELL) {
+                shell_handle_key(c);
+                redraw_needed = 1;
+            }
+            // SE FOR O EDITOR, MANDA PARA O HANDLER DO EDITOR
+            else if (active_win->type == TYPE_EDITOR) {
+                editor_handle_key(c); // Esta função atualiza o buffer da janela
+                redraw_needed = 1;    // Avisa que a janela mudou e precisa ser redesenhada
+            }
+        }
+    }
+
+        // Se estiver arrastando janela, AÍ SIM precisa de redraw total
         if (dragging_window_id != WIN_ID_NONE) {
             if (click) {
                 Window* w = wm_get(dragging_window_id);
@@ -158,20 +164,26 @@ void kernel_main(unsigned long magic, unsigned long addr) {
                 }
             } 
             else {
-                if (mx >= 20 && mx <= 52) {
-                    if (my >= 20 && my <= 52) { // Shell
-                        wm_create(TYPE_SHELL, "Terminal", 100, 100, 300, 180, COLOR_GRAY);
-                        redraw_needed = 1;
-                    }
-                    else if (my >= 80 && my <= 112) { // Calc
-                        wm_create(TYPE_CALC, "Calc", 150, 150, 160, 220, COLOR_GRAY);
-                        redraw_needed = 1;
-                    }
+                // Ícones
+                if (mx >= 20 && mx <= 52 && my >= 20 && my <= 52) { 
+                    wm_create(TYPE_SHELL, "Terminal", 100, 100, 300, 180, 0xFFC0C0C0);
+                    redraw_needed = 1;
+                    while(mouse_get_status() & 1);
+                }
+                else if (mx >= 20 && mx <= 52 && my >= 80 && my <= 112) {
+                    wm_create(TYPE_CALC, "Calc", 150, 150, 160, 220, 0xFFC0C0C0);
+                    redraw_needed = 1;
                     while(mouse_get_status() & 1);
                 }
             }
         }
+
+        if (windows_changed) {
+            redraw_needed = 1;
+            windows_changed = 0; // Reseta o sinal
+        }
         
+        // Shell
         if (current_app_id != WIN_ID_NONE && wm_get(current_app_id)->type == TYPE_SHELL) {
              char c = keyboard_get_key();
              if (c != 0) {
@@ -180,9 +192,10 @@ void kernel_main(unsigned long magic, unsigned long addr) {
              }
         }
 
+        // Só faz refresh pesado se realmente necessário (janelas)
         if (redraw_needed) {
             refresh_screen();
-            draw_mouse_cursor();
+            draw_mouse_cursor(); // Garante que o mouse fique no topo
             redraw_needed = 0;
         }
         

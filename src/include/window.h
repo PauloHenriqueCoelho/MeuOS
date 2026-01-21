@@ -53,5 +53,6 @@ int wm_check_body_collision(int mx, int my);
 int wm_wait_click(int win_id);
 
 extern int current_app_id;
+extern volatile int windows_changed;
 
 #endif

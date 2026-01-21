@@ -1,79 +1,77 @@
+; src/arch/x86/interrupt.asm
+section .text
+extern isr_handler
 global idt_flush
-global isr1
-extern keyboard_handler_isr ; Nome da função C que vai receber o sinal
-global isr12
-extern mouse_handler_isr
-global isr0   ; IRQ 0 = Timer
-extern timer_callback
-global isr128
-extern syscall_handler
 
-
-; Carrega a tabela IDT
 idt_flush:
     mov eax, [esp+4]
     lidt [eax]
     ret
 
-isr0:
+; Macros
+%macro ISR_NOERRCODE 1
+  global isr%1
+  isr%1:
     cli
-    pusha
-    
-    call timer_callback
-    
-    ; Envia EOI para o PIC Mestre (0x20)
-    mov al, 0x20
-    out 0x20, al
-    
-    popa
-    sti
-    iret
+    push byte 0
+    push byte %1
+    jmp isr_common_stub
+%endmacro
 
-; --- HANDLER DO TECLADO (IRQ 1) ---
-isr1:
-    cli                 ; 1. Desliga interrupções para não encavalar
-    pusha               ; 2. Salva todos os registradores (A, B, C, D...)
-
-    call keyboard_handler_isr ; 3. Chama o código C
-
-    ; 4. Envia o sinal de "Pronto" (EOI - End of Interrupt) para o PIC
-    mov al, 0x20
-    out 0x20, al
-
-    popa                ; 5. Restaura os registradores
-    sti                 ; 6. Religa interrupções
-    iret                ; 7. Volta para onde o código estava antes de você digitar
-
-isr12:
+%macro ISR_ERRCODE 1
+  global isr%1
+  isr%1:
     cli
-    pusha               ; Salva registradores
-    
-    call mouse_handler_isr ; Chama o driver C do mouse
-    
-    ; Envia EOI (End of Interrupt) para PIC Mestre (0x20) e Escravo (0xA0)
-    ; O mouse está no Escravo, então precisamos avisar os dois.
-    mov al, 0x20
-    out 0xA0, al        ; Avisa o Escravo
-    out 0x20, al        ; Avisa o Mestre
-    
-    popa                ; Restaura registradores
+    push byte %1
+    jmp isr_common_stub
+%endmacro
+
+%macro IRQ 2
+  global irq%1
+  irq%1:
+    cli
+    push byte 0
+    push byte %2
+    jmp isr_common_stub
+%endmacro
+
+; Definições
+ISR_NOERRCODE 0
+ISR_NOERRCODE 1
+ISR_ERRCODE   14
+ISR_NOERRCODE 128 ; Syscall
+
+IRQ   0,    32
+IRQ   1,    33
+IRQ   8,    40
+IRQ   12,   44
+IRQ   14,   46
+IRQ   15,   47
+
+; --- O STUB CORRIGIDO (Passagem por Ponteiro) ---
+isr_common_stub:
+    pusha           ; Salva registradores
+
+    mov ax, ds
+    push eax        ; Salva DS
+
+    mov ax, 0x10    ; Carrega Kernel DS
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    push esp        ; <--- O PULO DO GATO: Empilha o ponteiro da stack!
+    call isr_handler
+    add esp, 4      ; Limpa o argumento (ponteiro)
+
+    pop eax         ; Restaura DS
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    popa            ; Restaura registradores
+    add esp, 8      ; Limpa erro/int_no
     sti
-    iret
-
-isr128:
-    cli             ; Desativa interrupções (Padrão de entrada)
-    pusha           ; Salva os registradores da calculadora
-    
-    ; --- A CORREÇÃO MÁGICA ---
-    sti             ; LIGA AS INTERRUPÇÕES! 
-    ; Agora o Timer e o Mouse funcionam enquanto a syscall roda!
-    ; -------------------------
-
-    push esp        
-    call syscall_handler
-    add esp, 4      
-    
-    cli             ; Desliga para restaurar o contexto com segurança
-    popa            
-    sti             ; Religa para voltar ao programa
     iret

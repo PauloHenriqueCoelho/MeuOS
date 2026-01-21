@@ -1,6 +1,7 @@
 #include "../include/io.h"
 #include "../include/utils.h"
 #include "../include/vga.h"
+#include "../include/idt.h" // <--- NECESSÁRIO para registrar a interrupção
 
 // Buffer Circular
 #define KB_BUFFER_SIZE 256
@@ -18,8 +19,10 @@ char kbd_US [128] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-// --- Chamado pelo ASSEMBLY (Automaticamente) ---
-void keyboard_handler_isr() {
+// --- Chamado pelo ASSEMBLY (Agora com assinatura correta) ---
+void keyboard_handler_isr(registers_t* r) {
+    (void)r; // Evita warning de variável não usada
+    
     uint8_t scancode = inb(0x60);
 
     // Se for tecla pressionada (bit 7 desligado)
@@ -47,6 +50,9 @@ char keyboard_get_key() {
 void keyboard_init() {
     write_ptr = 0;
     read_ptr = 0;
+    
+    // CORREÇÃO CRÍTICA: Registrar o handler na IDT (IRQ 1 = INT 33)
+    register_interrupt_handler(33, keyboard_handler_isr);
     
     // Ativa teclado
     outb(0x64, 0xAE);

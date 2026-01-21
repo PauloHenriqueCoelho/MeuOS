@@ -7,6 +7,7 @@
 #include "../include/script.h"
 #include "../include/mouse.h"
 #include "../include/fs.h"
+#include "../include/editor.h" // <--- ADICIONE ESTA LINHA  
 
 // Cores 32-bit
 #define COLOR_WHITE 0xFFFFFFFF
@@ -154,5 +155,13 @@ void shell_execute(char* command) {
     // MSG
     else if (strncmp(command, "msg ", 4) == 0) {
         os_msgbox("Mensagem", command + 4);
+    }
+
+    else if (strncmp(command, "edit ", 5) == 0) {
+        char* filename = get_argument(command);
+        editor_open(filename);
+    }
+    else if (strcmp(command, "save") == 0) {
+        editor_save();
     }
 }
