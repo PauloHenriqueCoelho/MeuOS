@@ -18,8 +18,12 @@ C_OBJECTS = $(patsubst src/%.c, build/%.o, $(C_SOURCES))
 ASM_OBJECTS = $(patsubst src/arch/x86/%.asm, build/arch/%.o, $(ASM_SOURCES))
 
 KERNEL_BIN = build/kernel.bin
+PACKER = tools/packer
 
 # --- Regras ---
+
+$(PACKER): tools/packer.c
+	gcc tools/packer.c -o $(PACKER)
 
 # O padrão agora é criar o Kernel E o Disco
 all: $(KERNEL_BIN) disk.img
@@ -41,10 +45,12 @@ build/arch/%.o: src/arch/x86/%.asm
 	$(ASM) -f elf32 $< -o $@
 
 # O 'run' agora depende do 'disk.img'
-run: $(KERNEL_BIN) disk.img
-	qemu-system-i386 -kernel $(KERNEL_BIN) -hda disk.img -display cocoa \
- 	-d int,cpu_reset,guest_errors -D qemu.log \
- 	-serial stdio
+run: $(KERNEL_BIN) disk.img $(PACKER)
+# Injeta a calculadora no disco
+	./$(PACKER) disk.img files/calc.bin calc
 
+# Roda o QEMU
+	qemu-system-i386 -kernel $(KERNEL_BIN) -hda disk.img -display cocoa \
+	-serial stdio
 clean:
 	rm -rf build disk.img

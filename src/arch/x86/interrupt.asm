@@ -61,15 +61,19 @@ isr12:
     iret
 
 isr128:
-    cli             ; Desativa interrupções
-    pusha           ; Salva EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
+    cli             ; Desativa interrupções (Padrão de entrada)
+    pusha           ; Salva os registradores da calculadora
     
-    ; Empurra os registadores como um argumento para a função C
+    ; --- A CORREÇÃO MÁGICA ---
+    sti             ; LIGA AS INTERRUPÇÕES! 
+    ; Agora o Timer e o Mouse funcionam enquanto a syscall roda!
+    ; -------------------------
+
     push esp        
     call syscall_handler
-    add esp, 4      ; Limpa o argumento da stack
+    add esp, 4      
     
-    popa            ; Restaura os registadores
-    sti             ; Reativa interrupções
-    iret            ; Volta para o programa de utilizador
-
+    cli             ; Desliga para restaurar o contexto com segurança
+    popa            
+    sti             ; Religa para voltar ao programa
+    iret

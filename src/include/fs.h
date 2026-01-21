@@ -6,7 +6,9 @@
 #define TABLE_SECTOR 1
 #define DATA_START_SECTOR 2
 
-typedef struct {
+#define SECTORS_PER_FILE 64
+
+typedef struct __attribute__((packed)) {
     char name[16];
     uint32_t sector;
     uint8_t used;

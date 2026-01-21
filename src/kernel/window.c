@@ -44,11 +44,26 @@ void refresh_screen() {
     //draw_clock();
 }
 
+
+// Atualiza o texto de um botão específico numa janela
+void wm_update_button(int win_id, int btn_id, char* new_text) {
+    Window* w = wm_get(win_id);
+    if (!w) return;
+
+    for (int i = 0; i < w->button_count; i++) {
+        if (w->buttons[i].id == btn_id) {
+            // Copia o novo texto para o botão (Cuidado com overflow aqui no futuro!)
+            // Assumindo que você tem strcpy no utils.h
+            strcpy(w->buttons[i].label, new_text);
+            return;
+        }
+    }
+}
+
 // No arquivo src/kernel/window.c
 int wm_wait_click(int win_id) {
     while (1) {
         // Redesenha a tela e o mouse a cada iteração para manter a responsividade
-        refresh_screen();
         draw_mouse_cursor();
 
         if (mouse_get_status() & 1) {  // Botão esquerdo pressionado

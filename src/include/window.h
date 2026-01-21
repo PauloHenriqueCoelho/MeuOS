@@ -42,6 +42,7 @@ int wm_create(int type, char* title, int x, int y, int w, int h, uint8_t color);
 void wm_close(int id);
 Window* wm_get(int id);
 void wm_focus(int id);
+void wm_update_button(int win_id, int btn_id, char* new_text);
 
 // Função Mestra de Desenho (O WM decide como desenhar cada tipo)
 

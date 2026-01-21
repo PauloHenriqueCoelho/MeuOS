@@ -43,26 +43,31 @@ void syscall_handler(registers_t* regs) {
             i++;
         }
         b->label[i] = '\0';
+    }else if (regs->eax == 13) {
+        // Precisamos converter o endereço virtual do programa para físico ou confiar
+        // que o mapeamento está correto. Como mapeamos 1:1 ou via user page,
+        // vamos usar o ponteiro direto por enquanto.
+        wm_update_button(regs->ebx, regs->ecx, (char*)regs->edx);
     }
     break;
 }
-        case 11: // os_wait_event
-            // Corrigido de 'r' para 'regs'
-            regs->eax = wm_wait_click(regs->ebx); 
-            break;
-        case 12: { // os_window_create
-    char* title = (char*)regs->ebx;
-    int x = (regs->ecx >> 16) & 0xFFFF;
-    int y = regs->ecx & 0xFFFF;
-    int w = (regs->edx >> 16) & 0xFFFF;
-    int h = regs->edx & 0xFFFF;
+    case 11: // os_wait_event
+        // Corrigido de 'r' para 'regs'
+        regs->eax = wm_wait_click(regs->ebx); 
+    break;
+    case 12: { // os_window_create
+        char* title = (char*)regs->ebx;
+        int x = (regs->ecx >> 16) & 0xFFFF;
+        int y = regs->ecx & 0xFFFF;
+        int w = (regs->edx >> 16) & 0xFFFF;
+        int h = regs->edx & 0xFFFF;
 
     // Cria a janela e retorna o ID para o programa
-    regs->eax = wm_create(TYPE_CALC, title, x, y, w, h, 7);
+        regs->eax = wm_create(TYPE_CALC, title, x, y, w, h, 7);
     break;
-}
-        default:
-            os_print("Erro: Syscall desconhecida!\n");
-            break;
+    }
+    default:
+        os_print("Erro: Syscall desconhecida!\n");
+    break;
     }
 }

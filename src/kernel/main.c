@@ -34,7 +34,7 @@ void kernel_main() {
     init_gdt(); video_init(); init_idt(); keyboard_init(); mouse_init(); wm_init(); init_timer(100);
     pmm_init(128 * 1024 * 1024);
     paging_init();
-            task_init();
+    task_init();
 
     __asm__ volatile("sti");
 
